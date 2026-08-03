@@ -1,0 +1,1243 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title type="text">ArbStray&#39;s Blog</title>
+    <subtitle type="html">MemE is a powerful and highly customizable GoHugo theme for personal blogs.</subtitle>
+    <updated>2026-07-31T18:15:59&#43;08:00</updated>
+    <id>http://localhost:1313/</id>
+    <link rel="alternate" type="text/html" href="http://localhost:1313/" />
+    <link rel="self" type="application/atom&#43;xml" href="http://localhost:1313/atom.xml" />
+    <author>
+            <name>ArbStray</name>
+            <uri>http://localhost:1313/</uri>
+            
+                <email>myseeker501@gmail.com</email>
+            </author>
+    <rights>[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en)</rights>
+    <generator uri="https://gohugo.io/" version="0.164.0">Hugo</generator>
+        <entry>
+            <title type="text">
+从SFINAE到Concepts</title>
+            <link rel="alternate" type="text/html" href="http://localhost:1313/posts/sfinae_to_concepts/" />
+            <id>http://localhost:1313/posts/sfinae_to_concepts/</id>
+            <updated>2026-07-31T18:15:59&#43;08:00</updated>
+            <published>2026-07-31T15:46:45&#43;08:00</published>
+            <author>
+                    <name>ArbStray</name>
+                    <uri>http://localhost:1313/</uri>
+                    <email>myseeker501@gmail.com</email>
+                    </author>
+            <rights>[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en)</rights><summary type="html">
+                &lt;p&gt;了解到C++20新出的Concepts解决了原本SFINAE的问题，还是蛮惊喜的，这东西好久没遇到过了，现在梳理一下吧。&lt;/p&gt;
+&lt;p&gt;SFINAE是C++模板元编程中的一个重要概念，全称是 &amp;ldquo;Substitution Failure Is Not An Error&amp;rdquo;（替换失败不是错误）。&lt;/p&gt;
+&lt;p&gt;那么为什么我们需要SFINAE呢，他要解决的是模板的重载问题，正式说法是&amp;quot;如何在编译期根据类型特性，有选择地启用/禁用模板&amp;quot;。类比函数重载来说，函数重载&lt;/p&gt;
+&lt;p&gt;的规则是：编译器根据参数类型直接匹配，这是编译器的&amp;quot;硬编码&amp;quot;规则。&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;void process(int x) {
+    std::cout &amp;lt;&amp;lt; &amp;#34;int: &amp;#34; &amp;lt;&amp;lt; x &amp;lt;&amp;lt; std::endl;
+}
+
+void process(double x) {
+    std::cout &amp;lt;&amp;lt; &amp;#34;double: &amp;#34; &amp;lt;&amp;lt; x &amp;lt;&amp;lt; std::endl;
+}
+
+void process(const std::string&amp;amp; x) {
+    std::cout &amp;lt;&amp;lt; &amp;#34;string: &amp;#34; &amp;lt;&amp;lt; x &amp;lt;&amp;lt; std::endl;
+}
+
+int main() {
+    process(42);        // 调用 int 版本
+    process(3.14);      // 调用 double 版本
+    process(&amp;#34;hello&amp;#34;);    // 调用 string 版本
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;但模板是在编译期的东西，编译期才不知道你的template T是否具有相关操作&lt;/p&gt;
+                
+&lt;blockquote&gt;
+&lt;p&gt;Read original: &lt;a href=&#34;http://localhost:1313/posts/sfinae_to_concepts/&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;http://localhost:1313/posts/sfinae_to_concepts/&lt;/a&gt;&lt;br&gt;
+Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;https://username.substack.com&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;subscribe via Substack&lt;/a&gt; to support my work!&lt;/p&gt;
+&lt;/blockquote&gt;
+            </summary>
+            
+                <content type="html">
+                    
+&lt;p&gt;了解到C++20新出的Concepts解决了原本SFINAE的问题，还是蛮惊喜的，这东西好久没遇到过了，现在梳理一下吧。&lt;/p&gt;
+&lt;p&gt;SFINAE是C++模板元编程中的一个重要概念，全称是 &amp;ldquo;Substitution Failure Is Not An Error&amp;rdquo;（替换失败不是错误）。&lt;/p&gt;
+&lt;p&gt;那么为什么我们需要SFINAE呢，他要解决的是模板的重载问题，正式说法是&amp;quot;如何在编译期根据类型特性，有选择地启用/禁用模板&amp;quot;。类比函数重载来说，函数重载&lt;/p&gt;
+&lt;p&gt;的规则是：编译器根据参数类型直接匹配，这是编译器的&amp;quot;硬编码&amp;quot;规则。&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;void process(int x) {
+    std::cout &amp;lt;&amp;lt; &amp;#34;int: &amp;#34; &amp;lt;&amp;lt; x &amp;lt;&amp;lt; std::endl;
+}
+
+void process(double x) {
+    std::cout &amp;lt;&amp;lt; &amp;#34;double: &amp;#34; &amp;lt;&amp;lt; x &amp;lt;&amp;lt; std::endl;
+}
+
+void process(const std::string&amp;amp; x) {
+    std::cout &amp;lt;&amp;lt; &amp;#34;string: &amp;#34; &amp;lt;&amp;lt; x &amp;lt;&amp;lt; std::endl;
+}
+
+int main() {
+    process(42);        // 调用 int 版本
+    process(3.14);      // 调用 double 版本
+    process(&amp;#34;hello&amp;#34;);    // 调用 string 版本
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;但模板是在编译期的东西，编译期才不知道你的template T是否具有相关操作&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;#include &amp;lt;iostream&amp;gt;
+
+template&amp;lt;class T&amp;gt; auto print(const T&amp;amp; t, int) -&amp;gt; decltype(void(t.value))
+{
+    std::cout &amp;lt;&amp;lt; &amp;#34;Has value: &amp;#34; &amp;lt;&amp;lt; t.value &amp;lt;&amp;lt; &amp;#34;\n&amp;#34;;
+}
+
+template&amp;lt;class T&amp;gt; void print(const T&amp;amp; t, ...)
+{
+    std::cout &amp;lt;&amp;lt; &amp;#34;General: &amp;#34; &amp;lt;&amp;lt; t &amp;lt;&amp;lt; &amp;#34;\n&amp;#34;;
+}
+
+struct Foo { int value = 42; };
+
+int main() {
+    print(Foo{}, 0);   // Has value: 42
+    print(3.14, 0);   // General: 3.14
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;这是一个经典的SFINAE实现，print(b)在这里因为SFINAE匹配特化版本失败，去匹配通用版本成功了(模板会优先匹配更高特化的版本，没有SFINAE的保护这里就会编译错误)。&lt;/p&gt;
+&lt;p&gt;decltype(void(t.value))是一种典型的SFINAE，若t.value不存在就换一个模板。&lt;/p&gt;
+&lt;p&gt;除此之外还有很多方法触发SFINAE，只要能让模板替换失败就可以，比如函数返回值，函数参数，模板参数&amp;hellip;反正有很多&lt;/p&gt;
+&lt;p&gt;在这里讲一下enable_if算常用点的&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;template&amp;lt;typename T,
+         typename std::enable_if&amp;lt;std::is_integral&amp;lt;T&amp;gt;::value, void&amp;gt;::type* = nullptr&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;enable_if&amp;lt;std::is_integral&lt;T&gt;::value当T是整形value为true，enable_if&amp;lt;&amp;gt;::type*为void类型指针，不是整形SFINAE&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;以上晦涩难懂且编译信息复杂错误信息难以定位，于是我们引入Concepts&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;C++ Concepts（概念） 是 C++20 引入的一套模板约束机制。它可以明确描述&lt;/p&gt;
+&lt;p&gt;“这个模板参数必须具备哪些能力，才能使用该模板。”&lt;/p&gt;
+&lt;p&gt;它主要解决传统模板中错误信息难懂、接口要求不明确、SFINAE 写法复杂等问题。&lt;/p&gt;
+&lt;p&gt;以下为Concepts参考&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;
+// concepts_demo.cpp
+// 编译：
+//   g++ -std=c++20 -Wall -Wextra -pedantic concepts_demo.cpp -o concepts_demo
+//   clang++ -std=c++20 -Wall -Wextra -pedantic concepts_demo.cpp -o concepts_demo
+
+#include &amp;lt;concepts&amp;gt;
+#include &amp;lt;cstddef&amp;gt;
+#include &amp;lt;functional&amp;gt;
+#include &amp;lt;iostream&amp;gt;
+#include &amp;lt;list&amp;gt;
+#include &amp;lt;ostream&amp;gt;
+#include &amp;lt;string&amp;gt;
+#include &amp;lt;type_traits&amp;gt;
+#include &amp;lt;utility&amp;gt;
+#include &amp;lt;vector&amp;gt;
+
+// ============================================================
+// 1. 使用 type_traits 定义 Concept
+// ============================================================
+
+template&amp;lt;typename T&amp;gt;
+concept Integer = std::is_integral_v&amp;lt;T&amp;gt;;
+
+template&amp;lt;typename T&amp;gt;
+concept Number =
+std::integral&amp;lt;T&amp;gt; ||
+std::floating_point&amp;lt;T&amp;gt;;
+
+// 通过组合 Concept 建立更具体的约束。
+// 这样有利于编译器进行约束包含关系（subsumption）判断。
+template&amp;lt;typename T&amp;gt;
+concept SignedInteger =
+std::integral&amp;lt;T&amp;gt; &amp;amp;&amp;amp;
+std::signed_integral&amp;lt;T&amp;gt;;
+
+// ============================================================
+// 2. 使用 requires 表达式定义能力型 Concept
+// ============================================================
+
+// 要求 T 支持 a + b，并且结果可以转换为 T。
+template&amp;lt;typename T&amp;gt;
+concept Addable = requires(const T &amp;amp; a, const T &amp;amp; b)
+{
+    { a + b } -&amp;gt; std::convertible_to&amp;lt;T&amp;gt;;
+};
+
+// 要求 T 可以输出到 std::ostream。
+template&amp;lt;typename T&amp;gt;
+concept StreamPrintable =
+    requires(std::ostream &amp;amp; output, const T &amp;amp; value)
+{
+    { output &amp;lt;&amp;lt; value } -&amp;gt; std::same_as&amp;lt;std::ostream&amp;amp;&amp;gt;;
+};
+
+// 要求 T 存在 value_type。
+template&amp;lt;typename T&amp;gt;
+concept HasValueType = requires
+{
+    typename T::value_type;
+};
+
+// ============================================================
+// 3. requires 表达式中的四种要求
+// ============================================================
+
+template&amp;lt;typename T&amp;gt;
+concept ContainerLike = requires(T container, const T constContainer)
+{
+    // 1）类型要求：
+    // 检查嵌套类型是否存在。
+    typename T::value_type;
+    typename T::iterator;
+    typename T::const_iterator;
+
+    // 2）简单要求：
+    // 只检查表达式是否合法。
+    container.begin();
+    container.end();
+    constContainer.begin();
+    constContainer.end();
+
+    // 3）复合要求：
+    // 检查表达式是否合法，并检查返回值约束。
+    { constContainer.size() } -&amp;gt; std::convertible_to&amp;lt;std::size_t&amp;gt;;
+
+    // 4）嵌套要求：
+    // 在 requires 表达式内部增加布尔约束。
+        requires std::copy_constructible&amp;lt;typename T::value_type&amp;gt;;
+};
+
+// 要求成员 swap 是 noexcept 的。
+template&amp;lt;typename T&amp;gt;
+concept NoThrowMemberSwappable =
+    requires(T a, T b)
+{
+    { a.swap(b) } noexcept;
+};
+
+// ============================================================
+// 4. 使用 Concept 的四种经典语法
+// ============================================================
+
+// 写法一：requires 子句。
+template&amp;lt;typename T&amp;gt;
+    requires Integer&amp;lt;T&amp;gt;
+T twice_v1(T value)
+{
+    return value * 2;
+}
+
+// 写法二：直接约束模板参数。
+template&amp;lt;Integer T&amp;gt;
+T twice_v2(T value)
+{
+    return value * 2;
+}
+
+// 写法三：尾部 requires 子句。
+template&amp;lt;typename T&amp;gt;
+T twice_v3(T value) requires Integer&amp;lt;T&amp;gt;
+{
+    return value * 2;
+}
+
+// 写法四：简写函数模板，使用 constrained auto。
+auto twice_v4(Integer auto value)
+{
+    return value * 2;
+}
+
+// 也可以直接使用标准库 Concept。
+auto square(std::integral auto value)
+{
+    return value * value;
+}
+
+// ============================================================
+// 5. 自定义 Concept 用于普通函数模板
+// ============================================================
+
+template&amp;lt;Addable T&amp;gt;
+T add(const T&amp;amp; left, const T&amp;amp; right)
+{
+    return left + right;
+}
+
+template&amp;lt;StreamPrintable T&amp;gt;
+void printLine(const T&amp;amp; value)
+{
+    std::cout &amp;lt;&amp;lt; value &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+}
+
+// ============================================================
+// 6. 多个 Concept 组合
+// ============================================================
+
+template&amp;lt;typename T&amp;gt;
+concept PrintableNumber =
+Number&amp;lt;T&amp;gt; &amp;amp;&amp;amp;
+StreamPrintable&amp;lt;T&amp;gt;;
+
+template&amp;lt;PrintableNumber T&amp;gt;
+void printNumber(T value)
+{
+    std::cout &amp;lt;&amp;lt; &amp;#34;number = &amp;#34; &amp;lt;&amp;lt; value &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+}
+
+// ============================================================
+// 7. Concepts 参与函数重载
+// ============================================================
+
+// 无约束的通用版本。
+template&amp;lt;typename T&amp;gt;
+void classify(const T&amp;amp;)
+{
+    std::cout &amp;lt;&amp;lt; &amp;#34;generic type\n&amp;#34;;
+}
+
+// 整数版本比通用版本约束更强。
+template&amp;lt;std::integral T&amp;gt;
+void classify(const T&amp;amp;)
+{
+    std::cout &amp;lt;&amp;lt; &amp;#34;integral type\n&amp;#34;;
+}
+
+// SignedInteger 显式组合了 std::integral，
+// 因而对有符号整数来说，它比 integral 版本更具体。
+template&amp;lt;SignedInteger T&amp;gt;
+void classify(const T&amp;amp;)
+{
+    std::cout &amp;lt;&amp;lt; &amp;#34;signed integral type\n&amp;#34;;
+}
+
+// ============================================================
+// 8. Concept 约束类模板
+// ============================================================
+
+template&amp;lt;std::integral T&amp;gt;
+class Counter
+{
+public:
+    void add(T value)
+    {
+        count_ += value;
+    }
+
+    [[nodiscard]]
+    T value() const
+    {
+        return count_;
+    }
+
+private:
+    T count_{};
+};
+
+// ============================================================
+// 9. 只约束类模板的部分成员函数
+// ============================================================
+
+template&amp;lt;typename T&amp;gt;
+class Box
+{
+public:
+    explicit Box(T value)
+        : value_(std::move(value))
+    {
+    }
+
+    [[nodiscard]]
+    const T&amp;amp; value() const
+    {
+        return value_;
+    }
+
+    // 只有支持加法的类型才拥有 add() 能力。
+    T add(const T&amp;amp; other) const
+        requires Addable&amp;lt;T&amp;gt;
+    {
+        return value_ + other;
+    }
+
+    // 只有可输出类型才能调用 print()。
+    void print() const
+        requires StreamPrintable&amp;lt;T&amp;gt;
+    {
+        std::cout &amp;lt;&amp;lt; &amp;#34;Box value: &amp;#34; &amp;lt;&amp;lt; value_ &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+    }
+
+private:
+    T value_;
+};
+
+// ============================================================
+// 10. Range / Container Concept
+// ============================================================
+
+template&amp;lt;ContainerLike Container&amp;gt;
+void printContainer(const Container&amp;amp; container)
+{
+    std::cout &amp;lt;&amp;lt; &amp;#34;[ &amp;#34;;
+
+    for (const auto&amp;amp; element : container)
+    {
+        std::cout &amp;lt;&amp;lt; element &amp;lt;&amp;lt; &amp;#39; &amp;#39;;
+    }
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;]\n&amp;#34;;
+}
+
+// 使用 C++20 Ranges 自带的 Concept。
+template&amp;lt;std::ranges::input_range Range&amp;gt;
+    requires StreamPrintable&amp;lt;std::ranges::range_value_t&amp;lt;Range&amp;gt;&amp;gt;
+void printRange(const Range&amp;amp; range)
+{
+    std::cout &amp;lt;&amp;lt; &amp;#34;range: &amp;#34;;
+
+    for (const auto&amp;amp; element : range)
+    {
+        std::cout &amp;lt;&amp;lt; element &amp;lt;&amp;lt; &amp;#39; &amp;#39;;
+    }
+
+    std::cout &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+}
+
+// ============================================================
+// 11. 可调用对象 Concept
+// ============================================================
+
+template&amp;lt;typename Function, typename... Args&amp;gt;
+    requires std::invocable&amp;lt;Function, Args...&amp;gt;
+decltype(auto) execute(Function&amp;amp;&amp;amp; function, Args&amp;amp;&amp;amp;... args)
+{
+    return std::invoke(
+        std::forward&amp;lt;Function&amp;gt;(function),
+        std::forward&amp;lt;Args&amp;gt;(args)...
+    );
+}
+
+// 对返回值进一步施加约束。
+template&amp;lt;typename Function, typename... Args&amp;gt;
+    requires std::regular_invocable&amp;lt;Function, Args...&amp;gt;
+&amp;amp;&amp;amp; std::integral&amp;lt;
+    std::invoke_result_t&amp;lt;Function, Args...&amp;gt;
+&amp;gt;
+auto executeIntegerFunction(Function&amp;amp;&amp;amp; function, Args&amp;amp;&amp;amp;... args)
+{
+    return std::invoke(
+        std::forward&amp;lt;Function&amp;gt;(function),
+        std::forward&amp;lt;Args&amp;gt;(args)...
+    );
+}
+
+// ============================================================
+// 12. 自定义类型满足 Concept
+// ============================================================
+
+struct User
+{
+    std::string name;
+};
+
+// 让 User 满足 StreamPrintable。
+std::ostream&amp;amp; operator&amp;lt;&amp;lt;(std::ostream&amp;amp; output, const User&amp;amp; user)
+{
+    return output &amp;lt;&amp;lt; &amp;#34;User{name=\&amp;#34;&amp;#34; &amp;lt;&amp;lt; user.name &amp;lt;&amp;lt; &amp;#34;\&amp;#34;}&amp;#34;;
+}
+
+struct Point
+{
+    int x{};
+    int y{};
+};
+
+// 让 Point 满足 Addable。
+Point operator+(const Point&amp;amp; left, const Point&amp;amp; right)
+{
+    return {
+        left.x + right.x,
+        left.y + right.y
+    };
+}
+
+// 让 Point 满足 StreamPrintable。
+std::ostream&amp;amp; operator&amp;lt;&amp;lt;(std::ostream&amp;amp; output, const Point&amp;amp; point)
+{
+    return output &amp;lt;&amp;lt; &amp;#34;Point{&amp;#34; &amp;lt;&amp;lt; point.x &amp;lt;&amp;lt; &amp;#34;, &amp;#34; &amp;lt;&amp;lt; point.y &amp;lt;&amp;lt; &amp;#39;}&amp;#39;;
+}
+
+// 不满足 Addable，也不满足 StreamPrintable。
+struct EmptyType
+{
+};
+
+// ============================================================
+// 13. 编译期检查
+// ============================================================
+
+static_assert(Integer&amp;lt;int&amp;gt;);
+static_assert(Integer&amp;lt;unsigned long&amp;gt;);
+static_assert(!Integer&amp;lt;double&amp;gt;);
+
+static_assert(Number&amp;lt;int&amp;gt;);
+static_assert(Number&amp;lt;double&amp;gt;);
+static_assert(!Number&amp;lt;std::string&amp;gt;);
+
+static_assert(SignedInteger&amp;lt;int&amp;gt;);
+static_assert(!SignedInteger&amp;lt;unsigned int&amp;gt;);
+
+static_assert(Addable&amp;lt;int&amp;gt;);
+static_assert(Addable&amp;lt;std::string&amp;gt;);
+static_assert(Addable&amp;lt;Point&amp;gt;);
+static_assert(!Addable&amp;lt;EmptyType&amp;gt;);
+
+static_assert(StreamPrintable&amp;lt;int&amp;gt;);
+static_assert(StreamPrintable&amp;lt;std::string&amp;gt;);
+static_assert(StreamPrintable&amp;lt;User&amp;gt;);
+static_assert(StreamPrintable&amp;lt;Point&amp;gt;);
+static_assert(!StreamPrintable&amp;lt;EmptyType&amp;gt;);
+
+static_assert(HasValueType&amp;lt;std::vector&amp;lt;int&amp;gt;&amp;gt;);
+static_assert(HasValueType&amp;lt;std::list&amp;lt;std::string&amp;gt;&amp;gt;);
+static_assert(!HasValueType&amp;lt;int&amp;gt;);
+
+static_assert(ContainerLike&amp;lt;std::vector&amp;lt;int&amp;gt;&amp;gt;);
+static_assert(ContainerLike&amp;lt;std::list&amp;lt;std::string&amp;gt;&amp;gt;);
+
+// ============================================================
+// 14. 主函数
+// ============================================================
+
+int main()
+{
+    std::cout &amp;lt;&amp;lt; &amp;#34;===== 1. 四种约束语法 =====\n&amp;#34;;
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;twice_v1(10) = &amp;#34; &amp;lt;&amp;lt; twice_v1(10) &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+    std::cout &amp;lt;&amp;lt; &amp;#34;twice_v2(10) = &amp;#34; &amp;lt;&amp;lt; twice_v2(10) &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+    std::cout &amp;lt;&amp;lt; &amp;#34;twice_v3(10) = &amp;#34; &amp;lt;&amp;lt; twice_v3(10) &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+    std::cout &amp;lt;&amp;lt; &amp;#34;twice_v4(10) = &amp;#34; &amp;lt;&amp;lt; twice_v4(10) &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+    std::cout &amp;lt;&amp;lt; &amp;#34;square(6)   = &amp;#34; &amp;lt;&amp;lt; square(6) &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;\n===== 2. 自定义 Concept =====\n&amp;#34;;
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;add(10, 20) = &amp;#34; &amp;lt;&amp;lt; add(10, 20) &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+
+    std::string hello = &amp;#34;Hello, &amp;#34;;
+    std::string world = &amp;#34;Concepts&amp;#34;;
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;add(string, string) = &amp;#34;
+        &amp;lt;&amp;lt; add(hello, world)
+        &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+
+    Point point1{ 1, 2 };
+    Point point2{ 3, 4 };
+    Point point3 = add(point1, point2);
+
+    printLine(point3);
+    printLine(User{ &amp;#34;Alice&amp;#34; });
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;\n===== 3. Concept 组合 =====\n&amp;#34;;
+
+    printNumber(42);
+    printNumber(3.14);
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;\n===== 4. 约束重载 =====\n&amp;#34;;
+
+    classify(std::string{ &amp;#34;hello&amp;#34; }); // generic type
+    classify(3.14);                 // generic type
+    classify(42U);                  // integral type
+    classify(42);                   // signed integral type
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;\n===== 5. 约束类模板 =====\n&amp;#34;;
+
+    Counter&amp;lt;int&amp;gt; counter;
+    counter.add(10);
+    counter.add(20);
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;counter = &amp;#34; &amp;lt;&amp;lt; counter.value() &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;\n===== 6. 约束部分成员 =====\n&amp;#34;;
+
+    Box&amp;lt;int&amp;gt; integerBox{ 100 };
+    std::cout &amp;lt;&amp;lt; &amp;#34;integerBox.add(23) = &amp;#34;
+        &amp;lt;&amp;lt; integerBox.add(23)
+        &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+    integerBox.print();
+
+    Box&amp;lt;std::string&amp;gt; stringBox{ &amp;#34;Hello&amp;#34; };
+    std::cout &amp;lt;&amp;lt; &amp;#34;stringBox.add(...) = &amp;#34;
+        &amp;lt;&amp;lt; stringBox.add(&amp;#34;, C++20&amp;#34;)
+        &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+    stringBox.print();
+
+    Box&amp;lt;User&amp;gt; userBox{ User{&amp;#34;Bob&amp;#34;} };
+
+    // User 支持输出，因此可以调用 print()。
+    userBox.print();
+
+    // User 不支持 operator+，所以不能调用：
+    // userBox.add(User{&amp;#34;Alice&amp;#34;});
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;\n===== 7. Container / Range =====\n&amp;#34;;
+
+    const std::vector&amp;lt;int&amp;gt; numbers{ 1, 2, 3, 4, 5 };
+    const std::list&amp;lt;std::string&amp;gt; words{
+        &amp;#34;C++&amp;#34;,
+        &amp;#34;Concepts&amp;#34;,
+        &amp;#34;Ranges&amp;#34;
+    };
+
+    printContainer(numbers);
+    printContainer(words);
+
+    printRange(numbers);
+    printRange(words);
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;\n===== 8. invocable =====\n&amp;#34;;
+
+    const int result1 = execute(
+        [](int a, int b)
+        {
+            return a + b;
+        },
+        10,
+        20
+    );
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;execute result = &amp;#34; &amp;lt;&amp;lt; result1 &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+
+    const int result2 = executeIntegerFunction(
+        [](int value)
+        {
+            return value * 10;
+        },
+        7
+    );
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;integer function result = &amp;#34;
+        &amp;lt;&amp;lt; result2
+        &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+
+    std::cout &amp;lt;&amp;lt; &amp;#34;\n===== 9. noexcept Concept =====\n&amp;#34;;
+
+    std::cout &amp;lt;&amp;lt; std::boolalpha;
+    std::cout &amp;lt;&amp;lt; &amp;#34;vector&amp;lt;int&amp;gt; has noexcept member swap: &amp;#34;
+        &amp;lt;&amp;lt; NoThrowMemberSwappable&amp;lt;std::vector&amp;lt;int&amp;gt;&amp;gt;
+        &amp;lt;&amp;lt; &amp;#39;\n&amp;#39;;
+
+    return 0;
+}
+
+// ============================================================
+// 15. 以下代码用于观察“约束不满足”的编译错误
+// 将 #if 0 改为 #if 1 后重新编译即可。
+// ============================================================
+
+#if 0
+
+void invalidExamples()
+{
+    // double 不满足 Integer。
+    auto value1 = twice_v1(3.14);
+
+    // double 不满足 Counter 的 integral 约束。
+    Counter&amp;lt;double&amp;gt; counter;
+
+    // EmptyType 不满足 Addable。
+    EmptyType a;
+    EmptyType b;
+    auto value2 = add(a, b);
+
+    // EmptyType 不满足 StreamPrintable。
+    printLine(EmptyType{});
+
+    // int 不满足 ContainerLike。
+    printContainer(42);
+
+    // lambda 返回 double，不满足“返回整数”的约束。
+    auto value3 = executeIntegerFunction(
+        [](double value)
+        {
+            return value * 2.0;
+        },
+        3.14
+    );
+}
+
+#endif
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;总而言之，先concept $1 = requires(T a,T b){}&lt;/p&gt;
+&lt;p&gt;然后require $1或者写参数中&lt;/p&gt;
+&lt;p&gt;注意事项：&lt;/p&gt;
+&lt;p&gt;Concept 是编译期机制，通常没有运行时成本。&lt;/p&gt;
+
+                    
+&lt;blockquote&gt;
+&lt;p&gt;Read original: &lt;a href=&#34;http://localhost:1313/posts/sfinae_to_concepts/&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;http://localhost:1313/posts/sfinae_to_concepts/&lt;/a&gt;&lt;br&gt;
+Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;https://username.substack.com&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;subscribe via Substack&lt;/a&gt; to support my work!&lt;/p&gt;
+&lt;/blockquote&gt;
+                </content>
+            
+            
+            
+            
+            
+                
+                    
+                
+                    
+                
+            
+        </entry>
+    
+        <entry>
+            <title type="text">
+game104_net_02</title>
+            <link rel="alternate" type="text/html" href="http://localhost:1313/posts/game104_net_02/" />
+            <id>http://localhost:1313/posts/game104_net_02/</id>
+            <updated>2026-07-31T15:02:27&#43;08:00</updated>
+            <published>2026-07-31T14:43:01&#43;08:00</published>
+            <author>
+                    <name>ArbStray</name>
+                    <uri>http://localhost:1313/</uri>
+                    <email>myseeker501@gmail.com</email>
+                    </author>
+            <rights>[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en)</rights><summary type="html">
+                &lt;h3 id=&#34;三种主流的网络同步架构&#34;&gt;&lt;strong&gt;三种主流的网络同步架构&lt;/strong&gt;&lt;/h3&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;快照同步 (Snapshot / Step-shot Synchronization)&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;帧同步 (Lockstep Synchronization)&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;状态同步 (State Synchronization)&lt;/strong&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id=&#34;快照同步-snapshot-synchronization&#34;&gt;&lt;strong&gt;快照同步 (Snapshot Synchronization)&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;&lt;strong&gt;服务器绝对权威&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;工作流程如下3：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;客户端 (Client):&lt;/strong&gt; 职责非常单一，仅负责采集用户&lt;strong&gt;输入 (Input)&lt;/strong&gt;（如键盘、鼠标操作）并将其发送给服务器。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;服务器 (Server):&lt;/strong&gt; 作为&lt;strong&gt;绝对权威&lt;/strong&gt;，接收所有客户端的输入，独立地、完整地模拟整个游戏世界。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;同步过程:&lt;/strong&gt; 服务器以固定的时间间隔（Tick Rate，例如每秒10次）为整个游戏世界拍摄一张&lt;strong&gt;快照 (Snapshot)&lt;/strong&gt;。这张快照包含了该时刻所有关键对象（玩家、AI等）的完整状态（如精确的位置、旋转、速度、血量等）。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;客户端表现:&lt;/strong&gt; 客户端接收到服务器发来的快照后，不进行任何本地推演或计算，而是像操作“&lt;strong&gt;提线木偶 (Puppet/Pawn)&lt;/strong&gt;”一样，将游戏世界中的所有对象&lt;strong&gt;强制更新&lt;/strong&gt;到快照所描述的状态，然后基于这个状态进行渲染。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h4 id=&#34;关键优化技术&#34;&gt;&lt;strong&gt;关键优化技术&lt;/strong&gt;&lt;/h4&gt;
+&lt;p&gt;直接应用原始的快照同步会遇到性能瓶颈，因此诞生了两种关键的优化方法。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;1. 客户端插值 (Client-Side Interpolation)&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;问题:&lt;/strong&gt; 服务器的更新频率（Tick Rate，如10Hz）通常远低于客户端的渲染帧率（Framerate，如60Hz）。如果客户端每一帧都直接跳转到最新的快照状态，画面会显得非常卡顿、不连贯（Jittery）。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;解决方案:&lt;/strong&gt; 客户端在收到两个连续的快照（例如 &lt;code&gt;Snapshot_T1&lt;/code&gt; 和 &lt;code&gt;Snapshot_T2&lt;/code&gt;）之间，并不会立即应用 &lt;code&gt;T2&lt;/code&gt; 的状态。而是在 &lt;code&gt;T1&lt;/code&gt; 到 &lt;code&gt;T2&lt;/code&gt; 的时间段内，通过&lt;strong&gt;插值 (Interpolation)&lt;/strong&gt; 算法，平滑地将游戏对象从 &lt;code&gt;T1&lt;/code&gt; 的状态过渡到 &lt;code&gt;T2&lt;/code&gt; 的状态。这使得玩家在客户端看到的是流畅的动画，而非离散的状态跳变。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;2. 增量压缩 (Delta Compression)&lt;/strong&gt;&lt;/p&gt;
+                
+&lt;blockquote&gt;
+&lt;p&gt;Read original: &lt;a href=&#34;http://localhost:1313/posts/game104_net_02/&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;http://localhost:1313/posts/game104_net_02/&lt;/a&gt;&lt;br&gt;
+Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;https://username.substack.com&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;subscribe via Substack&lt;/a&gt; to support my work!&lt;/p&gt;
+&lt;/blockquote&gt;
+            </summary>
+            
+                <content type="html">
+                    
+&lt;h3 id=&#34;三种主流的网络同步架构&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#三种主流的网络同步架构&#34; class=&#34;anchor-link&#34; aria-label=&#34;三种主流的网络同步架构&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;三种主流的网络同步架构&lt;/strong&gt;&lt;/h3&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;快照同步 (Snapshot / Step-shot Synchronization)&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;帧同步 (Lockstep Synchronization)&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;状态同步 (State Synchronization)&lt;/strong&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id=&#34;快照同步-snapshot-synchronization&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#快照同步-snapshot-synchronization&#34; class=&#34;anchor-link&#34; aria-label=&#34;快照同步-snapshot-synchronization&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;快照同步 (Snapshot Synchronization)&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;&lt;strong&gt;服务器绝对权威&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;工作流程如下3：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;客户端 (Client):&lt;/strong&gt; 职责非常单一，仅负责采集用户&lt;strong&gt;输入 (Input)&lt;/strong&gt;（如键盘、鼠标操作）并将其发送给服务器。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;服务器 (Server):&lt;/strong&gt; 作为&lt;strong&gt;绝对权威&lt;/strong&gt;，接收所有客户端的输入，独立地、完整地模拟整个游戏世界。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;同步过程:&lt;/strong&gt; 服务器以固定的时间间隔（Tick Rate，例如每秒10次）为整个游戏世界拍摄一张&lt;strong&gt;快照 (Snapshot)&lt;/strong&gt;。这张快照包含了该时刻所有关键对象（玩家、AI等）的完整状态（如精确的位置、旋转、速度、血量等）。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;客户端表现:&lt;/strong&gt; 客户端接收到服务器发来的快照后，不进行任何本地推演或计算，而是像操作“&lt;strong&gt;提线木偶 (Puppet/Pawn)&lt;/strong&gt;”一样，将游戏世界中的所有对象&lt;strong&gt;强制更新&lt;/strong&gt;到快照所描述的状态，然后基于这个状态进行渲染。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h4 id=&#34;关键优化技术&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#关键优化技术&#34; class=&#34;anchor-link&#34; aria-label=&#34;关键优化技术&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;关键优化技术&lt;/strong&gt;&lt;/h4&gt;
+&lt;p&gt;直接应用原始的快照同步会遇到性能瓶颈，因此诞生了两种关键的优化方法。&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;1. 客户端插值 (Client-Side Interpolation)&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;问题:&lt;/strong&gt; 服务器的更新频率（Tick Rate，如10Hz）通常远低于客户端的渲染帧率（Framerate，如60Hz）。如果客户端每一帧都直接跳转到最新的快照状态，画面会显得非常卡顿、不连贯（Jittery）。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;解决方案:&lt;/strong&gt; 客户端在收到两个连续的快照（例如 &lt;code&gt;Snapshot_T1&lt;/code&gt; 和 &lt;code&gt;Snapshot_T2&lt;/code&gt;）之间，并不会立即应用 &lt;code&gt;T2&lt;/code&gt; 的状态。而是在 &lt;code&gt;T1&lt;/code&gt; 到 &lt;code&gt;T2&lt;/code&gt; 的时间段内，通过&lt;strong&gt;插值 (Interpolation)&lt;/strong&gt; 算法，平滑地将游戏对象从 &lt;code&gt;T1&lt;/code&gt; 的状态过渡到 &lt;code&gt;T2&lt;/code&gt; 的状态。这使得玩家在客户端看到的是流畅的动画，而非离散的状态跳变。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;2. 增量压缩 (Delta Compression)&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;问题:&lt;/strong&gt; 完整的世界快照包含海量数据。如果每次都将整个世界的状态广播给所有客户端，将产生巨大的网络流量，对服务器的&lt;strong&gt;上行带宽&lt;/strong&gt;是毁灭性的考验。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;解决方案:&lt;/strong&gt; 服务器不发送完整的快照，而是计算&lt;strong&gt;当前快照与上一个已发送快照之间的差异 (Delta)&lt;/strong&gt;，并只将这些&lt;strong&gt;变化了的数据&lt;/strong&gt;发送给客户端。
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;例如:&lt;/strong&gt; 在1/10秒内，场景中90%的AI可能位置和血量都未发生变化。那么在新的数据包中，就无需包含这些未变化AI的信息。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;帧同步lock-step-synchronization&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#帧同步lock-step-synchronization&#34; class=&#34;anchor-link&#34; aria-label=&#34;帧同步lock-step-synchronization&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;帧同步（Lock-step Synchronization）&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;帧同步强制所有参与者&lt;strong&gt;步调一致 (Lock-step)&lt;/strong&gt; 地推进游戏世界。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心观点&lt;/strong&gt;: 服务器不负责模拟游戏世界，只充当一个**“指令中继站”**。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;基本流程&lt;/strong&gt;:&lt;/li&gt;
+&lt;/ul&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;客户端&lt;/strong&gt;: 将本机的玩家输入（Input）发送给服务器。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;服务器&lt;/strong&gt;: 收集&lt;strong&gt;所有&lt;/strong&gt;客户端在当前同步帧的输入。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;服务器&lt;/strong&gt;: 将收集到的所有输入打包，广播回&lt;strong&gt;所有&lt;/strong&gt;客户端。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;客户端&lt;/strong&gt;: 接收到包含所有人输入的包后，在本地执行游戏逻辑，将游戏世界从第 N 帧推进到第 N+1 帧。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;&lt;strong&gt;核心问题&lt;/strong&gt;: &lt;strong&gt;最慢的玩家（或网络最差的玩家）决定了所有人的游戏体验&lt;/strong&gt;&lt;/p&gt;
+&lt;h3 id=&#34;优化方案桶同步bucket-synchronization&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#优化方案桶同步bucket-synchronization&#34; class=&#34;anchor-link&#34; aria-label=&#34;优化方案桶同步bucket-synchronization&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;优化方案：桶同步（Bucket Synchronization）&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;为了解决经典帧同步的“短板效应”，业界提出了一种非常实用的优化方案——&lt;strong&gt;桶同步&lt;/strong&gt;。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心思想&lt;/strong&gt;: &lt;strong&gt;从“等人”变为“等车”&lt;/strong&gt;。服务器不再无限期地等待最慢的玩家，而是设定一个固定的时间窗口（例如 100ms），我们称之为“桶”（Bucket）。服务器只处理在这个时间窗口内到达的输入。
+&lt;ul&gt;
+&lt;li&gt;服务器每隔 100ms 就“发车”一次，将这个“桶”里收集到的所有输入广播给所有客户端。&lt;/li&gt;
+&lt;li&gt;如果某个玩家的输入因为延迟，错过了这班“车”，那他的操作要么被&lt;strong&gt;丢弃&lt;/strong&gt;，要么被延迟到**下一个“桶”**里处理。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;真同步的挑战调试与状态校验&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#真同步的挑战调试与状态校验&#34; class=&#34;anchor-link&#34; aria-label=&#34;真同步的挑战调试与状态校验&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;真同步的挑战：调试与状态校验&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;&lt;strong&gt;核心观点&lt;/strong&gt;：在复杂的现代游戏中，维持完美的确定性极具挑战。一个微小的浮点数精度误差或未考虑到的平台差异，都可能像&lt;strong&gt;蝴蝶效应&lt;/strong&gt;一样，在几百帧后导致客户端之间出现严重的状态不一致（Desync）。&lt;/p&gt;
+&lt;h3 id=&#34;实现确定性的挑战&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#实现确定性的挑战&#34; class=&#34;anchor-link&#34; aria-label=&#34;实现确定性的挑战&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;实现确定性的挑战&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;在典型的游戏引擎和计算机体系结构中，实现跨平台的、绝对的确定性极其困难，主要挑战来源于以下几个方面：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;浮点数 (Floating-Point Numbers)&lt;/strong&gt;: 不同硬件架构（如 x86 vs ARM）、不同编译器、甚至不同的优化级别都可能导致浮点数运算产生微小的精度差异。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;随机数 (Random Numbers)&lt;/strong&gt;: 游戏逻辑（如暴击率、掉落）依赖随机性，但真随机无法同步。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;容器与算法 (Containers &amp;amp; Algorithms)&lt;/strong&gt;: 像 &lt;code&gt;std::vector&lt;/code&gt; 或各类树结构，在不同平台或编译器下，其内部实现或迭代顺序可能存在差异，导致计算结果不一致。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;数学库 (Math Libraries)&lt;/strong&gt;: 第三方或系统自带的数学库（如三角函数 &lt;code&gt;sin&lt;/code&gt;, &lt;code&gt;cos&lt;/code&gt;）在不同平台上的实现和精度可能不同。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;物理模拟 (Physics Simulation)&lt;/strong&gt;: 物理引擎包含大量复杂的迭代运算（如雅可比矩阵求解），是确定性的重灾区。微小的浮点数误差会被迅速放大。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;逻辑执行顺序 (Logic Execution Order)&lt;/strong&gt;: 在现代基于组件（Component-based）的引擎中，成百上千个组件的更新顺序如果不被严格固定，可能会导致截然不同的游戏结果&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;应对不确定网络缓冲与插值&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#应对不确定网络缓冲与插值&#34; class=&#34;anchor-link&#34; aria-label=&#34;应对不确定网络缓冲与插值&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;应对不确定网络：缓冲与插值&lt;/strong&gt;&lt;/h3&gt;
+&lt;h4 id=&#34;利用缓冲区buffer平滑网络抖动&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#利用缓冲区buffer平滑网络抖动&#34; class=&#34;anchor-link&#34; aria-label=&#34;利用缓冲区buffer平滑网络抖动&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;利用缓冲区（Buffer）平滑网络抖动&lt;/strong&gt;&lt;/h4&gt;
+&lt;p&gt;这个思想类似于在线看视频：视频网站会提前加载几秒甚至几十秒的内容到本地缓冲区，这样即使网络瞬间卡顿，播放也能保持流畅。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;实现方式&lt;/strong&gt;：客户端维护一个指令&lt;strong&gt;缓冲区（Buffer）&lt;/strong&gt;，可以看作一个小小的“蓄水池”。它会存储服务器发来的未来几帧的输入指令。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;优势&lt;/strong&gt;：当网络发生抖动，服务器的某个逻辑帧没有准时到达时，客户端的游戏逻辑可以从缓冲区中取出下一帧的指令继续执行，从而避免了游戏画面的卡顿。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4 id=&#34;逻辑帧与渲染帧分离&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#逻辑帧与渲染帧分离&#34; class=&#34;anchor-link&#34; aria-label=&#34;逻辑帧与渲染帧分离&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;逻辑帧与渲染帧分离&lt;/strong&gt;&lt;/h4&gt;
+&lt;p&gt;为了提供流畅的视觉体验，并进一步降低网络波动的影响，将游戏的&lt;strong&gt;逻辑帧&lt;/strong&gt;和&lt;strong&gt;渲染帧&lt;/strong&gt;解耦是一种至关重要的策略。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;关键术语&lt;/strong&gt;：
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;逻辑帧 (Logic Frame)&lt;/strong&gt;: 游戏世界状态发生改变的帧，由服务器的输入指令驱动。其更新频率可以较低，以适应网络条件（例如10-20 FPS）。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;渲染帧 (Render Frame)&lt;/strong&gt;: 画面被绘制到屏幕上的帧。其更新频率应该尽可能高，以匹配显示器的刷新率（例如60 FPS, 120 FPS）。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&#34;总结&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#总结&#34; class=&#34;anchor-link&#34; aria-label=&#34;总结&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;总结&lt;/h2&gt;
+&lt;p&gt;本部分深入探讨了真同步架构的三个核心支柱：以&lt;strong&gt;伪随机数&lt;/strong&gt;为基础的&lt;strong&gt;确定性&lt;/strong&gt;系统，用于保障开发质量的&lt;strong&gt;状态校验与调试&lt;/strong&gt;机制，以及用于对抗恶劣网络环境的&lt;strong&gt;缓冲与插值&lt;/strong&gt;技术。这些技术共同构成了真同步游戏稳定、流畅运行的基石。&lt;/p&gt;
+&lt;h3 id=&#34;断线重连&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#断线重连&#34; class=&#34;anchor-link&#34; aria-label=&#34;断线重连&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;断线重连&lt;/strong&gt;&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;客户端并非无状态的“傻瓜终端”，它会在本地（内存或磁盘）&lt;strong&gt;周期性地保存整个游戏世界的完整状态，形成“快照”&lt;/strong&gt;。例如，每隔几百帧或几千帧就进行一次存档。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;优势：&lt;/strong&gt; 当玩家断线重连时，无需从第0帧开始追赶。假设游戏已进行到第10000帧，而玩家在第9500帧断线，他本地最新的快照可能在第9400帧。重连时，他只需从第9400帧的快照状态开始，追赶此后600帧的输入指令计算逻辑帧，大大缩短了等待时间。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;具体流程：&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;ol&gt;
+&lt;li&gt;客户端加载最近的&lt;strong&gt;快照 (Snapshot)&lt;/strong&gt;。&lt;/li&gt;
+&lt;li&gt;从服务器获取从快照帧到当前最新帧之间的所有玩家&lt;strong&gt;输入指令 (Input)&lt;/strong&gt;。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;关闭渲染循环&lt;/strong&gt;，进入纯逻辑计算模式。&lt;/li&gt;
+&lt;li&gt;以远超正常游戏（如10倍速）的速度，疯狂执行逻辑更新，快速模拟（追赶）错过的游戏过程。&lt;/li&gt;
+&lt;li&gt;当逻辑帧追上服务器的当前帧时，恢复正常的渲染和逻辑循环，玩家无缝回到游戏中。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id=&#34;观战模式&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#观战模式&#34; class=&#34;anchor-link&#34; aria-label=&#34;观战模式&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;观战模式&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;实现流程：&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;ol&gt;
+&lt;li&gt;观战客户端加入时，向服务器请求一个较新的&lt;strong&gt;游戏世界快照&lt;/strong&gt;。&lt;/li&gt;
+&lt;li&gt;服务器将快照以及后续的所有玩家输入流持续发送给观战客户端。&lt;/li&gt;
+&lt;li&gt;观战客户端加载快照并以正常速度模拟游戏进程。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id=&#34;游戏回放-replay&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#游戏回放-replay&#34; class=&#34;anchor-link&#34; aria-label=&#34;游戏回放-replay&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;游戏回放 (Replay)&lt;/strong&gt;&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;实现机制：&lt;/strong&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;播放：&lt;/strong&gt; 从头播放就是从第0帧的初始状态开始，应用所有输入指令。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;拖动进度条：&lt;/strong&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;向后拖动（快进）：&lt;/strong&gt; 从当前位置或上一个快照开始，加速模拟后续的输入指令。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;向前拖动（快退）：&lt;/strong&gt; 回退到目标时间点之前的最近一个快照，然后从该快照重新模拟到目标时间点。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;状态篡改的应对策略&lt;/strong&gt;&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;所有客户端在特定帧（如每隔10帧）对自己当前的游戏世界状态计算一个哈希值或校验码。&lt;/li&gt;
+&lt;li&gt;将这个校验码发送给服务器（或在P2P模式下广播给其他玩家）。&lt;/li&gt;
+&lt;li&gt;服务器收集所有人的校验码。如果某个玩家的校验码与其他所有人不同，即可判定该玩家作弊或发生了状态不同步（Desync），并将其踢出游戏。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;&lt;strong&gt;全信息暴露&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;在帧同步模型中，为了保证确定性，&lt;strong&gt;每个客户端都必须拥有并模拟整个游戏的全部状态&lt;/strong&gt;。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;致命后果：&lt;/strong&gt; 这意味着即使有&lt;strong&gt;战争迷雾 (Fog of War)&lt;/strong&gt;，玩家的客户端内存中实际上也包含了敌方所有单位的位置、血量等全部信息&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;状态同步&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#状态同步&#34; class=&#34;anchor-link&#34; aria-label=&#34;状态同步&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;状态同步&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;其工作模式如下：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;客户端只关心自己&lt;/strong&gt;：每个客户端主要模拟与自己直接相关的行为（如移动、开火），并将这些行为意图或状态变化作为**指令（Commands）**发送给服务器。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;服务器模拟一切&lt;/strong&gt;：服务器接收所有客户端的指令，在一个&lt;strong&gt;权威的游戏世界&lt;/strong&gt;中进行模拟和运算，并判定所有交互的结果（如是否命中、伤害计算等）。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;服务器分发相关状态&lt;/strong&gt;：服务器不会将整个世界的状态广播给所有人，而是根据每个客户端的位置和视野，&lt;strong&gt;只将与其相关的部分世界状态&lt;/strong&gt;（如附近的玩家位置、周围发生的事件）同步给该客户端。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;&lt;strong&gt;状态同步 (State Synchronization) 的核心优势&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;非侵入性&lt;/strong&gt;：它不像&lt;strong&gt;帧同步 (Lockstep)&lt;/strong&gt; 那样对客户端逻辑有苛刻的确定性要求。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;高效性&lt;/strong&gt;：它不像粗暴的快照同步 (Snapshot Synchronization) 那样传输整个世界状态，而是只同步关键信息。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;内置增量更新 (Delta Compression)&lt;/strong&gt;：它天然地只同步&lt;strong&gt;状态发生变化的变量&lt;/strong&gt;，如果一个NPC静止不动，服务器就不会发送关于它的更新，节约了带宽。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;内置裁剪 (Culling)&lt;/strong&gt;：服务器可以根据&lt;strong&gt;兴趣范围 (Area of Interest, AOI)&lt;/strong&gt; 算法，判断哪些信息是与特定客户端相关的，只向其同步关心的实体信息，无关信息则不发送。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;在服务器权威模型下，&lt;strong&gt;操作与视觉反馈之间的网络延迟&lt;/strong&gt;是不可避免的
+&lt;strong&gt;客户端预测与服务器和解&lt;/strong&gt;
+当玩家在客户端进行操作时，客户端不再等待服务器的确认，而是&lt;strong&gt;立即在本地预测并执行这个操作的结果&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;服务器永远是对的 (The server is always right)&lt;/strong&gt;。如果出现不一致，客户端必须无条件接受服务器的状态，并修正自己的世界。这个过程就是“和解”&lt;/p&gt;
+&lt;h3 id=&#34;和解的工作流程&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_02/#和解的工作流程&#34; class=&#34;anchor-link&#34; aria-label=&#34;和解的工作流程&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;和解的工作流程&lt;/strong&gt;&lt;/h3&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;客户端存储历史记录&lt;/strong&gt;：客户端在进行预测时，需要将自己每一帧的&lt;strong&gt;输入指令&lt;/strong&gt;和&lt;strong&gt;预测状态&lt;/strong&gt;缓存下来，形成一个历史记录队列。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;服务器状态的“时空穿越”&lt;/strong&gt;：服务器发来的状态更新包，由于网络延迟，它描述的是&lt;strong&gt;过去某个时间点&lt;/strong&gt;的权威状态。例如，如果RTT是100ms，客户端在 &lt;code&gt;T&lt;/code&gt; 时刻收到的包，可能描述的是服务器在 &lt;code&gt;T - 50ms&lt;/code&gt; 时刻的世界状态。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;回溯与比较&lt;/strong&gt;：客户端收到服务器在 &lt;code&gt;T - 50ms&lt;/code&gt; 的状态后，会从自己的历史记录中找到自己在 &lt;code&gt;T - 50ms&lt;/code&gt; 时的&lt;strong&gt;预测状态&lt;/strong&gt;，并将两者进行比较。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;判断与执行&lt;/strong&gt;：&lt;/li&gt;
+&lt;/ol&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;如果一致&lt;/strong&gt;：说明从那时到现在，客户端的预测都是基于一个正确的起点。一切照旧，继续预测。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;如果不一致&lt;/strong&gt;：说明预测出错了。客户端必须&lt;strong&gt;认错&lt;/strong&gt;。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;执行校正&lt;/strong&gt;：&lt;/li&gt;
+&lt;/ol&gt;
+&lt;ul&gt;
+&lt;li&gt;客户端将自己的状态&lt;strong&gt;强制重置&lt;/strong&gt;为服务器发来的权威状态（即 &lt;code&gt;T - 50ms&lt;/code&gt; 时的状态）。&lt;/li&gt;
+&lt;li&gt;然后，客户端&lt;strong&gt;重新应用 (Replay)&lt;/strong&gt; 从 &lt;code&gt;T - 50ms&lt;/code&gt; 到当前时刻 &lt;code&gt;T&lt;/code&gt; 之间所有已发送给服务器的输入指令，快速重新模拟（Re-simulate）出一个&lt;strong&gt;新的、正确的当前状态&lt;/strong&gt;。&lt;/li&gt;
+&lt;li&gt;为了避免画面瞬间跳变（Snap），这个校正过程通常会通过平滑插值（Smoothing/Interpolation）在几帧内完成。&lt;/li&gt;
+&lt;/ul&gt;
+
+                    
+&lt;blockquote&gt;
+&lt;p&gt;Read original: &lt;a href=&#34;http://localhost:1313/posts/game104_net_02/&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;http://localhost:1313/posts/game104_net_02/&lt;/a&gt;&lt;br&gt;
+Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;https://username.substack.com&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;subscribe via Substack&lt;/a&gt; to support my work!&lt;/p&gt;
+&lt;/blockquote&gt;
+                </content>
+            
+            
+            
+            
+            
+                
+                    
+                
+                    
+                
+            
+        </entry>
+    
+        <entry>
+            <title type="text">
+game104_net_01</title>
+            <link rel="alternate" type="text/html" href="http://localhost:1313/posts/game104_net_01/" />
+            <id>http://localhost:1313/posts/game104_net_01/</id>
+            <updated>2026-07-31T14:48:51&#43;08:00</updated>
+            <published>2026-07-31T14:42:56&#43;08:00</published>
+            <author>
+                    <name>ArbStray</name>
+                    <uri>http://localhost:1313/</uri>
+                    <email>myseeker501@gmail.com</email>
+                    </author>
+            <rights>[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en)</rights><summary type="html">
+                &lt;h3 id=&#34;网络游戏面临的核心挑战&#34;&gt;&lt;strong&gt;网络游戏面临的核心挑战&lt;/strong&gt;&lt;/h3&gt;
+&lt;h3 id=&#34;1-一致性-consistency---平行宇宙问题&#34;&gt;&lt;strong&gt;1: 一致性 (Consistency) - “平行宇宙”问题&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;这是网络游戏最根本、最核心的挑战。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心观点：&lt;/strong&gt; 在网络游戏中，每个玩家的客户端实际上都在运行一个独立的、微缩版的“宇宙”。由于网络延迟的存在，这些“宇宙”永远无法做到&lt;strong&gt;完全同步&lt;/strong&gt;。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;技术目标：&lt;/strong&gt; 游戏架构的首要任务，就是在网络延迟和信息不完整的情况下，尽力维持所有玩家客户端世界的&lt;strong&gt;一致性&lt;/strong&gt;，确保关键事件的发生顺序和结果对所有人来说都是合理的。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;失败案例：&lt;/strong&gt; 在我的世界里，一个玻璃瓶是好的；在你的世界里，它已经被打碎了。当我看到你拿起一个“破碎的”瓶子喝水时，世界的“真实感”就被打破了，这就是一致性被破坏的体现。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;挑战-2-网络不可靠性-network-unreliability&#34;&gt;&lt;strong&gt;挑战 2: 网络不可靠性 (Network Unreliability)&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;与计算机内部总线那种近乎完美的通信不同，互联网是不可靠的。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;**核心观点：**我们的网络游戏必须直面一个充满缺陷的现实网络环境。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;常见问题:&lt;/strong&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;丢包 (Packet Loss):&lt;/strong&gt; 发送的数据包在传输过程中丢失。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;延迟/抖动 (Latency/Jitter):&lt;/strong&gt; 数据包传输耗时不稳定。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;拥塞 (Congestion):&lt;/strong&gt; 网络中数据过多导致传输缓慢。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;断线重连 (Disconnection/Reconnection):&lt;/strong&gt; 玩家随时可能掉线，并且需要能够无缝地回到游戏中。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;挑战-3-反作弊-anti-cheating&#34;&gt;&lt;strong&gt;挑战 3: 反作弊 (Anti-Cheating)&lt;/strong&gt;&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心观点：&lt;/strong&gt; 网络游戏本质上是一个庞大的&lt;strong&gt;虚拟经济系统&lt;/strong&gt;，有价值的地方就一定会有作弊的动机。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;挑战:&lt;/strong&gt; 如何设计架构，在技术层面有效防止和打击外挂、利用漏洞等作弊行为，是保障游戏公平性和生命周期的关键。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;额外挑战4-多样性与热更新应对复杂的生态与持续运营&#34;&gt;&lt;strong&gt;额外挑战4 ：多样性与热更新：应对复杂的生态与持续运营&lt;/strong&gt;&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心观点：&lt;/strong&gt; 在线游戏需要在一个极其复杂的软硬件环境中稳定运行，并且能够做到在不中断服务的情况下进行更新和修复。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;挑战来源：&lt;/strong&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;设备多样性 (Diversity):&lt;/strong&gt; 游戏需要同时支持多种平台和设备，例如 PC、iOS (iPhone/iPad)、Android，而服务器通常运行在 Linux 上。确保所有客户端都能运行&lt;strong&gt;完全一致的逻辑&lt;/strong&gt;是巨大的挑战。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;热更新 (Hot-Fixing / Live Updates):&lt;/strong&gt; 在线游戏是持续运营的服务（Game as a Service）。当发现严重Bug或需要调整游戏逻辑时，开发者必须有能力在大量玩家&lt;strong&gt;正在游戏&lt;/strong&gt;的情况下，”神不知鬼不觉”地推送更新，而不能简单地要求所有玩家下线并重新下载完整客户端。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;额外挑战4终极复杂度构建大规模并发的虚拟世界&#34;&gt;&lt;strong&gt;额外挑战4：终极复杂度：构建大规模并发的虚拟世界&lt;/strong&gt;&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心观点：&lt;/strong&gt; 随着同场景玩家数量的增加，系统需要处理的交互和数据同步复杂度会呈指数级增长，这是实现真正大型多人在线世界（如《头号玩家》中的“绿洲”）的最大技术瓶颈。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;复杂度的增长模型：&lt;/strong&gt;
+&lt;ul&gt;
+&lt;li&gt;当场景中有 N 个玩家时，两两之间可能产生的交互关系和网络连接的复杂度是以  的规模急剧扩张的。&lt;/li&gt;
+&lt;li&gt;从处理 2 个玩家的交互，到 200 个，再到 20000 个，其技术架构和资源消耗完全不是一个量级。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&#34;udp之上构建可靠通信&#34;&gt;&lt;strong&gt;UDP之上构建可靠通信&lt;/strong&gt;&lt;/h2&gt;
+&lt;h3 id=&#34;fec前向纠错-forward-error-correction&#34;&gt;&lt;strong&gt;FEC：前向纠错 (Forward Error Correction)&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;&lt;strong&gt;核心观点：&lt;/strong&gt; FEC 是一种更为主动的容错策略，其核心思想是 &lt;strong&gt;“空间换时间”&lt;/strong&gt;。它通过发送额外的冗余数据，使得接收方在发生少量丢包时，能够&lt;strong&gt;直接本地恢复出丢失的数据&lt;/strong&gt;，而无需等待发送方的重传。这对于延迟敏感的应用（如实时游戏）至关重要。&lt;/p&gt;
+                
+&lt;blockquote&gt;
+&lt;p&gt;Read original: &lt;a href=&#34;http://localhost:1313/posts/game104_net_01/&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;http://localhost:1313/posts/game104_net_01/&lt;/a&gt;&lt;br&gt;
+Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;https://username.substack.com&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;subscribe via Substack&lt;/a&gt; to support my work!&lt;/p&gt;
+&lt;/blockquote&gt;
+            </summary>
+            
+                <content type="html">
+                    
+&lt;h3 id=&#34;网络游戏面临的核心挑战&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#网络游戏面临的核心挑战&#34; class=&#34;anchor-link&#34; aria-label=&#34;网络游戏面临的核心挑战&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;网络游戏面临的核心挑战&lt;/strong&gt;&lt;/h3&gt;
+&lt;h3 id=&#34;1-一致性-consistency---平行宇宙问题&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#1-一致性-consistency---平行宇宙问题&#34; class=&#34;anchor-link&#34; aria-label=&#34;1-一致性-consistency---平行宇宙问题&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;1: 一致性 (Consistency) - “平行宇宙”问题&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;这是网络游戏最根本、最核心的挑战。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心观点：&lt;/strong&gt; 在网络游戏中，每个玩家的客户端实际上都在运行一个独立的、微缩版的“宇宙”。由于网络延迟的存在，这些“宇宙”永远无法做到&lt;strong&gt;完全同步&lt;/strong&gt;。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;技术目标：&lt;/strong&gt; 游戏架构的首要任务，就是在网络延迟和信息不完整的情况下，尽力维持所有玩家客户端世界的&lt;strong&gt;一致性&lt;/strong&gt;，确保关键事件的发生顺序和结果对所有人来说都是合理的。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;失败案例：&lt;/strong&gt; 在我的世界里，一个玻璃瓶是好的；在你的世界里，它已经被打碎了。当我看到你拿起一个“破碎的”瓶子喝水时，世界的“真实感”就被打破了，这就是一致性被破坏的体现。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;挑战-2-网络不可靠性-network-unreliability&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#挑战-2-网络不可靠性-network-unreliability&#34; class=&#34;anchor-link&#34; aria-label=&#34;挑战-2-网络不可靠性-network-unreliability&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;挑战 2: 网络不可靠性 (Network Unreliability)&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;与计算机内部总线那种近乎完美的通信不同，互联网是不可靠的。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;**核心观点：**我们的网络游戏必须直面一个充满缺陷的现实网络环境。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;常见问题:&lt;/strong&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;丢包 (Packet Loss):&lt;/strong&gt; 发送的数据包在传输过程中丢失。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;延迟/抖动 (Latency/Jitter):&lt;/strong&gt; 数据包传输耗时不稳定。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;拥塞 (Congestion):&lt;/strong&gt; 网络中数据过多导致传输缓慢。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;断线重连 (Disconnection/Reconnection):&lt;/strong&gt; 玩家随时可能掉线，并且需要能够无缝地回到游戏中。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;挑战-3-反作弊-anti-cheating&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#挑战-3-反作弊-anti-cheating&#34; class=&#34;anchor-link&#34; aria-label=&#34;挑战-3-反作弊-anti-cheating&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;挑战 3: 反作弊 (Anti-Cheating)&lt;/strong&gt;&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心观点：&lt;/strong&gt; 网络游戏本质上是一个庞大的&lt;strong&gt;虚拟经济系统&lt;/strong&gt;，有价值的地方就一定会有作弊的动机。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;挑战:&lt;/strong&gt; 如何设计架构，在技术层面有效防止和打击外挂、利用漏洞等作弊行为，是保障游戏公平性和生命周期的关键。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;额外挑战4-多样性与热更新应对复杂的生态与持续运营&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#额外挑战4-多样性与热更新应对复杂的生态与持续运营&#34; class=&#34;anchor-link&#34; aria-label=&#34;额外挑战4-多样性与热更新应对复杂的生态与持续运营&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;额外挑战4 ：多样性与热更新：应对复杂的生态与持续运营&lt;/strong&gt;&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心观点：&lt;/strong&gt; 在线游戏需要在一个极其复杂的软硬件环境中稳定运行，并且能够做到在不中断服务的情况下进行更新和修复。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;挑战来源：&lt;/strong&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;设备多样性 (Diversity):&lt;/strong&gt; 游戏需要同时支持多种平台和设备，例如 PC、iOS (iPhone/iPad)、Android，而服务器通常运行在 Linux 上。确保所有客户端都能运行&lt;strong&gt;完全一致的逻辑&lt;/strong&gt;是巨大的挑战。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;热更新 (Hot-Fixing / Live Updates):&lt;/strong&gt; 在线游戏是持续运营的服务（Game as a Service）。当发现严重Bug或需要调整游戏逻辑时，开发者必须有能力在大量玩家&lt;strong&gt;正在游戏&lt;/strong&gt;的情况下，”神不知鬼不觉”地推送更新，而不能简单地要求所有玩家下线并重新下载完整客户端。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;额外挑战4终极复杂度构建大规模并发的虚拟世界&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#额外挑战4终极复杂度构建大规模并发的虚拟世界&#34; class=&#34;anchor-link&#34; aria-label=&#34;额外挑战4终极复杂度构建大规模并发的虚拟世界&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;额外挑战4：终极复杂度：构建大规模并发的虚拟世界&lt;/strong&gt;&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心观点：&lt;/strong&gt; 随着同场景玩家数量的增加，系统需要处理的交互和数据同步复杂度会呈指数级增长，这是实现真正大型多人在线世界（如《头号玩家》中的“绿洲”）的最大技术瓶颈。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;复杂度的增长模型：&lt;/strong&gt;
+&lt;ul&gt;
+&lt;li&gt;当场景中有 N 个玩家时，两两之间可能产生的交互关系和网络连接的复杂度是以  的规模急剧扩张的。&lt;/li&gt;
+&lt;li&gt;从处理 2 个玩家的交互，到 200 个，再到 20000 个，其技术架构和资源消耗完全不是一个量级。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&#34;udp之上构建可靠通信&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#udp之上构建可靠通信&#34; class=&#34;anchor-link&#34; aria-label=&#34;udp之上构建可靠通信&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;UDP之上构建可靠通信&lt;/strong&gt;&lt;/h2&gt;
+&lt;h3 id=&#34;fec前向纠错-forward-error-correction&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#fec前向纠错-forward-error-correction&#34; class=&#34;anchor-link&#34; aria-label=&#34;fec前向纠错-forward-error-correction&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;FEC：前向纠错 (Forward Error Correction)&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;&lt;strong&gt;核心观点：&lt;/strong&gt; FEC 是一种更为主动的容错策略，其核心思想是 &lt;strong&gt;“空间换时间”&lt;/strong&gt;。它通过发送额外的冗余数据，使得接收方在发生少量丢包时，能够&lt;strong&gt;直接本地恢复出丢失的数据&lt;/strong&gt;，而无需等待发送方的重传。这对于延迟敏感的应用（如实时游戏）至关重要。&lt;/p&gt;
+&lt;h3 id=&#34;1-基于异或xor的简单纠错&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#1-基于异或xor的简单纠错&#34; class=&#34;anchor-link&#34; aria-label=&#34;1-基于异或xor的简单纠错&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;1. 基于异或(XOR)的简单纠错&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;这是一种轻量级且高效的 FEC 实现，非常适合处理单个数据包丢失的场景。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心原理：&lt;/strong&gt; 利用异或运算的特性：&lt;code&gt;A ⊕ B ⊕ B = A&lt;/code&gt;。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;算法流程：&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;ol&gt;
+&lt;li&gt;将一组数据包（例如 &lt;code&gt;A&lt;/code&gt;, &lt;code&gt;B&lt;/code&gt;, &lt;code&gt;C&lt;/code&gt;, &lt;code&gt;D&lt;/code&gt;）进行逐位异或运算，生成一个冗余的&lt;strong&gt;校验包 &lt;code&gt;E&lt;/code&gt;&lt;/strong&gt;。 E = A ⊕ B ⊕ C ⊕ D&lt;/li&gt;
+&lt;li&gt;将数据包 &lt;code&gt;A, B, C, D&lt;/code&gt; 和校验包 &lt;code&gt;E&lt;/code&gt; 一同发送给接收方。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;数据恢复：&lt;/strong&gt; 如果其中任意一个数据包（例如 &lt;code&gt;C&lt;/code&gt;）丢失，接收方可以用收到的所有其他包（包括校验包 &lt;code&gt;E&lt;/code&gt;）再次进行异或运算，即可恢复出丢失的包 &lt;code&gt;C&lt;/code&gt;。 C_recovered = A ⊕ B ⊕ D ⊕ E&lt;/li&gt;
+&lt;/ol&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;经典类比：&lt;/strong&gt; 这个算法与磁盘阵列技术 &lt;strong&gt;RAID 5&lt;/strong&gt; 的数据冗余和恢复原理完全相同。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;适用场景：&lt;/strong&gt; 在丢包率较低（如5%-10%）的网络环境下非常有效，能显著减少重传请求。但当一组内同时丢失两个或更多包时，此方法便会失效。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;2-里德-所罗门码-reed-solomon-codes&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#2-里德-所罗门码-reed-solomon-codes&#34; class=&#34;anchor-link&#34; aria-label=&#34;2-里德-所罗门码-reed-solomon-codes&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;2. 里德-所罗门码 (Reed-Solomon Codes)&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;这是一种更强大、更复杂的 FEC 算法，能够恢复多个丢失的数据包。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心思想：&lt;/strong&gt; 它基于高等代数理论，通过构建一个特殊的矩阵（如 &lt;strong&gt;范德蒙德矩阵, Vandermonde matrix&lt;/strong&gt;）来生成冗余数据。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;关键特性：&lt;/strong&gt; 这个特殊矩阵具有一个神奇的数学性质：&lt;strong&gt;从该矩阵中任意抽取 N 行（N为原始数据包数量）所构成的子矩阵，都是可逆的&lt;/strong&gt;。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;工作原理（概念）：&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;ol&gt;
+&lt;li&gt;原始数据 &lt;code&gt;D&lt;/code&gt; 与这个生成矩阵 &lt;code&gt;B&lt;/code&gt; 相乘，得到一个包含了原始数据和冗余数据的新信息块。&lt;/li&gt;
+&lt;li&gt;当接收方收到信息并发现有数据包丢失时，它可以通过构建一个基于已收到数据包的子矩阵，并利用其&lt;strong&gt;可逆性&lt;/strong&gt;，通过解线性方程组的方式，反向计算出所有丢失的原始数据。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id=&#34;ntp时钟同步&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#ntp时钟同步&#34; class=&#34;anchor-link&#34; aria-label=&#34;ntp时钟同步&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;NTP时钟同步&lt;/h2&gt;
+&lt;p&gt;!383528-20240329214251309-1285508408.png&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;T1：时间同步请求时间&lt;/li&gt;
+&lt;li&gt;T2：时间服务器接收到请求时间&lt;/li&gt;
+&lt;li&gt;T3：时间服务器响应时间&lt;/li&gt;
+&lt;li&gt;T4: 时间同步请求响应时间&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;客户端时间T4加Offset为服务端当前时间&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;T4 + Offset = T3 + Delay&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;Offset为计算服务端和客户端的时间偏差，Offset可以为正或者负值&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Offset = T3 + Delay - T4 =  [(T2 - T1) + (T3 – T4)]/2&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;NTP的局限在于假设&lt;strong&gt;网络延迟是对称的，&lt;strong&gt;实际上&lt;/strong&gt;下行带宽远大于上行带宽&lt;/strong&gt;&lt;/p&gt;
+&lt;h4 id=&#34;实用对时策略统计与过滤&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#实用对时策略统计与过滤&#34; class=&#34;anchor-link&#34; aria-label=&#34;实用对时策略统计与过滤&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;实用对时策略：统计与过滤&lt;/strong&gt;&lt;/h4&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;初次对时&lt;/strong&gt; 客户端连接成功后，首先运行一次基础NTP算法，快速将本地时钟大致对准服务器时间。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;多次采样&lt;/strong&gt; 在初次对时后，&lt;strong&gt;连续执行N次（例如5-10次）NTP握手过程&lt;/strong&gt;，收集一系列的 &lt;code&gt;(RTT, Offset)&lt;/code&gt; 数据对。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;数据过滤 (核心步骤)&lt;/strong&gt; 这是整个策略的关键，目的是剔除由网络异常（如抖动、丢包）导致的不可靠数据。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;ul&gt;
+&lt;li&gt;计算所有N次采样中 RTT 的&lt;strong&gt;平均值 &lt;code&gt;RTT_avg&lt;/code&gt;&lt;/strong&gt;。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;丢弃异常样本&lt;/strong&gt;：遍历所有样本，如果某个样本的 RTT 值显著高于平均值（例如，&lt;code&gt;RTT &amp;gt; RTT_avg * 1.5&lt;/code&gt;），则将其视为&lt;strong&gt;无效样本&lt;/strong&gt;并丢弃。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;原理解释&lt;/strong&gt;：&lt;strong&gt;高 RTT 通常意味着网络发生了拥塞或抖动&lt;/strong&gt;。在这种不稳定的网络状况下，延迟的对称性假设更不可能成立，因此计算出的 &lt;code&gt;Offset&lt;/code&gt; 值可信度极低&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&#34;rpc网络调用&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#rpc网络调用&#34; class=&#34;anchor-link&#34; aria-label=&#34;rpc网络调用&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;RPC网络调用&lt;/h2&gt;
+&lt;p&gt;原因：游戏逻辑处理函数放在服务器，客户端只管调用和接受返回值，由服务器执行具体行为，此过程可以使用RPC。&lt;/p&gt;
+&lt;p&gt;所有复杂的底层工作都由RPC框架自动完成：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;参数序列化&lt;/strong&gt;：框架自动将 &lt;code&gt;param1&lt;/code&gt;, &lt;code&gt;param2&lt;/code&gt; 等参数打包成二进制流。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;网络传输&lt;/strong&gt;：将数据包通过底层网络协议（TCP/UDP）发送到服务器。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;路由与分发&lt;/strong&gt;：服务器接收到数据包后，RPC框架识别出这是对 &lt;code&gt;DoSomething&lt;/code&gt; 函数的调用。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;参数反序列化&lt;/strong&gt;：在服务器端将二进制流还原为 &lt;code&gt;param1&lt;/code&gt;, &lt;code&gt;param2&lt;/code&gt;。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;执行函数&lt;/strong&gt;：调用真正的 &lt;code&gt;DoSomething&lt;/code&gt; 函数。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;返回结果&lt;/strong&gt;：将函数的返回值序列化并传回客户端（如果是同步调用）。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id=&#34;实现rpc的关键技术idl与存根-stubs&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#实现rpc的关键技术idl与存根-stubs&#34; class=&#34;anchor-link&#34; aria-label=&#34;实现rpc的关键技术idl与存根-stubs&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;实现RPC的关键技术：IDL与存根 (Stubs)&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;RPC框架之所以能实现这种“魔法”，主要依赖于两项关键技术。&lt;/p&gt;
+&lt;h3 id=&#34;1-idl-interface-definition-language---接口定义语言&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#1-idl-interface-definition-language---接口定义语言&#34; class=&#34;anchor-link&#34; aria-label=&#34;1-idl-interface-definition-language---接口定义语言&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;1. IDL (Interface Definition Language) - 接口定义语言&lt;/strong&gt;&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心观点&lt;/strong&gt;: &lt;strong&gt;IDL是一种用于描述远程函数接口（函数名、参数、返回值）的语言。它是一份“契约”，客户端和服务器都依据这份契约来生成相应的通信代码。&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;著名案例&lt;/strong&gt;: &lt;strong&gt;Google Protocol Buffers (Protobuf)&lt;/strong&gt; 就是一种流行的IDL。开发者用&lt;code&gt;.proto&lt;/code&gt;文件定义消息和服务接口，然后工具会自动生成不同语言（C++, C#, Go等）的客户端和服务器代码。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&#34;2-rpc-stubs-存根&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#2-rpc-stubs-存根&#34; class=&#34;anchor-link&#34; aria-label=&#34;2-rpc-stubs-存根&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;2. RPC Stubs (存根)&lt;/strong&gt;&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;核心观点&lt;/strong&gt;: &lt;strong&gt;Stub（存根）是IDL生成的、在本地代表远程接口的代码。客户端的Stub负责打包参数并发起调用，服务器的Stub负责接收请求并派发给真正的业务逻辑函数。&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;工作流程&lt;/strong&gt;:&lt;/li&gt;
+&lt;/ul&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;注册 (Registration)&lt;/strong&gt;: 当客户端与服务器建立连接时，它们会互相“告知”对方自己支持哪些RPC函数。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;生成存根&lt;/strong&gt;: 客户端和服务器内部会根据这些信息，建立一个可调用RPC函数的“目录”或“函数指针表”，这就是&lt;strong&gt;RPC Stubs&lt;/strong&gt;。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;调用与查找&lt;/strong&gt;: 当客户端代码调用一个RPC函数时，实际上是调用了本地的Stub。Stub会在这个目录中查找对应的函数信息，然后执行序列化和网络发送。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id=&#34;一个真实-rpc-的完整生命周期&#34;&gt;&lt;a href=&#34;http://localhost:1313/posts/game104_net_01/#一个真实-rpc-的完整生命周期&#34; class=&#34;anchor-link&#34; aria-label=&#34;一个真实-rpc-的完整生命周期&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;一个真实 RPC 的完整生命周期&lt;/strong&gt;&lt;/h3&gt;
+&lt;p&gt;&lt;strong&gt;数据发送端（例如：客户端）流程：&lt;/strong&gt;&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;调用发起：&lt;/strong&gt; 开发者调用 RPC 函数。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;序列化 (Serialization):&lt;/strong&gt; 将函数调用的参数（如整数、字符串、对象等）转换成二进制字节流。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;压缩 (Compression):&lt;/strong&gt; 对序列化后的数据进行压缩，以&lt;strong&gt;减少网络带宽消耗&lt;/strong&gt;。网络带宽在游戏运营中是宝贵的成本。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;加密 (Encryption):&lt;/strong&gt; 对压缩后的数据进行加密，防止网络传输过程中被黑客窃听或篡改，&lt;strong&gt;防止外挂和恶意攻击&lt;/strong&gt;。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;&lt;strong&gt;数据接收端（例如：服务器）流程：&lt;/strong&gt;&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;数据接收：&lt;/strong&gt; 从网络中接收到数据包。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;解密 (Decryption):&lt;/strong&gt; 使用约定的密钥进行解密。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;解压缩 (Decompression):&lt;/strong&gt; 将数据解压，还原其原始大小。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;反序列化 (Deserialization):&lt;/strong&gt; 将二进制字节流还原为程序可识别的参数。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;函数执行：&lt;/strong&gt; 使用还原后的参数，真正在本地执行对应的函数逻辑。&lt;/li&gt;
+&lt;/ol&gt;
+
+                    
+&lt;blockquote&gt;
+&lt;p&gt;Read original: &lt;a href=&#34;http://localhost:1313/posts/game104_net_01/&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;http://localhost:1313/posts/game104_net_01/&lt;/a&gt;&lt;br&gt;
+Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;https://username.substack.com&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;subscribe via Substack&lt;/a&gt; to support my work!&lt;/p&gt;
+&lt;/blockquote&gt;
+                </content>
+            
+            
+            
+            
+            
+                
+                    
+                
+                    
+                
+            
+        </entry>
+    
+        <entry>
+            <title type="text">
+readme</title>
+            <link rel="alternate" type="text/html" href="http://localhost:1313/posts/readme/" />
+            <id>http://localhost:1313/posts/readme/</id>
+            <updated>2026-07-31T14:37:38&#43;08:00</updated>
+            <published>2026-07-31T14:37:18&#43;08:00</published>
+            <author>
+                    <name>ArbStray</name>
+                    <uri>http://localhost:1313/</uri>
+                    <email>myseeker501@gmail.com</email>
+                    </author>
+            <rights>[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en)</rights><summary type="html">
+                &lt;p&gt;AboutMe&lt;/p&gt;
+                
+&lt;blockquote&gt;
+&lt;p&gt;Read original: &lt;a href=&#34;http://localhost:1313/posts/readme/&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;http://localhost:1313/posts/readme/&lt;/a&gt;&lt;br&gt;
+Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;https://username.substack.com&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;subscribe via Substack&lt;/a&gt; to support my work!&lt;/p&gt;
+&lt;/blockquote&gt;
+            </summary>
+            
+                <content type="html">
+                    
+&lt;p&gt;AboutMe&lt;/p&gt;
+
+                    
+&lt;blockquote&gt;
+&lt;p&gt;Read original: &lt;a href=&#34;http://localhost:1313/posts/readme/&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;http://localhost:1313/posts/readme/&lt;/a&gt;&lt;br&gt;
+Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;https://username.substack.com&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;subscribe via Substack&lt;/a&gt; to support my work!&lt;/p&gt;
+&lt;/blockquote&gt;
+                </content>
+            
+            
+            
+            
+            
+                
+                    
+                
+                    
+                
+            
+        </entry>
+    
+        <entry>
+            <title type="text">
+hello world</title>
+            <link rel="alternate" type="text/html" href="http://localhost:1313/posts/hello-world/" />
+            <id>http://localhost:1313/posts/hello-world/</id>
+            <updated>2026-07-31T13:43:01&#43;08:00</updated>
+            <published>2026-07-31T13:43:01&#43;08:00</published>
+            <author>
+                    <name>ArbStray</name>
+                    <uri>http://localhost:1313/</uri>
+                    <email>myseeker501@gmail.com</email>
+                    </author>
+            <rights>[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en)</rights><summary type="html">
+                
+                
+&lt;blockquote&gt;
+&lt;p&gt;Read original: &lt;a href=&#34;http://localhost:1313/posts/hello-world/&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;http://localhost:1313/posts/hello-world/&lt;/a&gt;&lt;br&gt;
+Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;https://username.substack.com&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;subscribe via Substack&lt;/a&gt; to support my work!&lt;/p&gt;
+&lt;/blockquote&gt;
+            </summary>
+            
+                <content type="html">
+                    
+
+                    
+&lt;blockquote&gt;
+&lt;p&gt;Read original: &lt;a href=&#34;http://localhost:1313/posts/hello-world/&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;http://localhost:1313/posts/hello-world/&lt;/a&gt;&lt;br&gt;
+Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;https://username.substack.com&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;subscribe via Substack&lt;/a&gt; to support my work!&lt;/p&gt;
+&lt;/blockquote&gt;
+                </content>
+            
+            
+            
+            
+            
+                
+                    
+                
+                    
+                
+            
+        </entry>
+    
+</feed>
