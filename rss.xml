@@ -23,10 +23,192 @@
         
             <copyright>[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en)</copyright>
         
-        <lastBuildDate>Mon, 03 Aug 2026 10:51:01 &#43;0800</lastBuildDate>
+        <lastBuildDate>Mon, 03 Aug 2026 13:54:46 &#43;0800</lastBuildDate>
         
             <atom:link rel="self" type="application/rss&#43;xml" href="http://localhost:1313/rss.xml" />
         
+        
+            <item>
+                <title>
+从半构造BUG到内存屏障</title>
+                <link>http://localhost:1313/posts/semi-constructed_to_memorybarriers/</link>
+                <guid isPermaLink="true">http://localhost:1313/posts/semi-constructed_to_memorybarriers/</guid>
+                <pubDate>Mon, 03 Aug 2026 11:22:58 &#43;0800</pubDate>
+                
+                    <author>myseeker501@gmail.com (ArbStray)</author>
+                
+                <copyright>[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en)</copyright>
+                
+                
+                <description>
+                        
+&lt;p&gt;new 不是一个操作，是三个，而它们的顺序不由写者决定。&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;// new 的三步
+p = new Singleton();
+// 展开为：
+void* raw = malloc(sizeof(Singleton));  // 1. 分配
+new(raw) Singleton();                    // 2. 构造（写成员变量）
+p = raw;                                 // 3. 赋值指针
+
+// malloc 只有两步
+p = (Singleton*)malloc(sizeof(Singleton));
+// 展开为：
+void* raw = malloc(sizeof(Singleton));  // 1. 分配
+p = (Singleton*)raw;                     // 2. 赋值指针（强转）
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;于是在多线程中引入了半构造bug的问题，简单来说就是A线程用new构造的三步过程中B线程读取了对应地址的内容造成问题。&lt;/p&gt;
+&lt;p&gt;这一问题解决方法很多，以下列出
+1、传统双检锁 + volatile&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;volatile Singleton* instance = nullptr;
+std::mutex mtx;
+
+Singleton* getInstance() {
+    if (instance == nullptr) {
+        std::lock_guard&amp;lt;std::mutex&amp;gt; lock(mtx);
+        if (instance == nullptr) {
+            Singleton* tmp = new Singleton();
+            instance = tmp;  // volatile写入有顺序保证
+        }
+    }
+    return const_cast&amp;lt;Singleton*&amp;gt;(instance);
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;但是C++ 的 volatile 版本双检锁在弱内存模型平台可能会挂&lt;/p&gt;
+&lt;p&gt;他只保证&amp;quot;不优化掉这次内存访问&amp;quot;&lt;/p&gt;
+&lt;p&gt;2、Meyers Singleton 即初始化为局部静态变量，因为C++11标准要求局部静态变量初始化是线程安全的，编译器会自动加锁。&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;Singleton&amp;amp; getInstance() {
+    static Singleton instance;  // C++11保证线程安全的初始化
+    return instance;
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;3、std::call_once是 C++11 提供的一次性初始化工具，保证某个函数在多线程环境下有且仅执行一次，而且其他线程会等到这次执行完成后才继续&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;std::once_flag flag;
+Singleton* instance = nullptr;
+Singleton* getInstance() {
+    std::call_once(flag, []() {
+        instance = new Singleton();
+    });
+    return instance;
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;4、使用 std::atomic + 内存序&lt;br&gt;
+这里的内存序也是我们讲的重点&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;std::atomic&amp;lt;Singleton*&amp;gt; instance{nullptr};
+std::mutex mtx;
+
+Singleton* getInstance() {
+    Singleton* tmp = instance.load(std::memory_order_acquire);
+    if (tmp == nullptr) {
+        std::lock_guard&amp;lt;std::mutex&amp;gt; lock(mtx);
+        tmp = instance.load(std::memory_order_relaxed);
+        if (tmp == nullptr) {
+            tmp = new Singleton();
+            instance.store(tmp, std::memory_order_release);
+        }
+    }
+    return tmp;
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;我们为什么需要内存屏障？这里的半构造bug只是一个具体点，主要原因是保证多线程下的程序执行按照一定的顺序&lt;br&gt;
+多线程下&amp;quot;程序顺序&amp;quot;和&amp;quot;实际执行顺序&amp;quot;是两件事，重排来自三个层面：&lt;/p&gt;
+&lt;p&gt;编译器重排：优化器在单线程语义等价的前提下自由调整读写顺序、把变量提到寄存器里。&lt;br&gt;
+CPU 乱序执行：流水线、乱序发射、投机执行。  [TODO]
+存储子系统：store buffer 让写不立即可见，invalidate queue 让读看到旧值。x86 有 store buffer 但保证 TSO；ARM/POWER 允许更激进的重排。 [TODO]&lt;/p&gt;
+&lt;p&gt;六种 memory_order&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;enum memory_order {
+    memory_order_relaxed,
+    memory_order_consume,   // 实践中等同 acquire
+    memory_order_acquire,
+    memory_order_release,
+    memory_order_acq_rel,
+    memory_order_seq_cst    // 默认
+};
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;relaxed
+只保证操作本身的原子性（不撕裂），不施加任何顺序约束，也不建立 happens-before[TODO]。唯一保证是对同一个原子变量的修改顺序（modification order）全局一致。&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;std::atomic&amp;lt;int&amp;gt; counter{0};
+counter.fetch_add(1, std::memory_order_relaxed);  // 只关心最终总数
+// 读取时用 acquire 或 seq_cst 才能看到别人的写
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;release / acquire
+这是最常用的一对，语义是单向栅栏：&lt;/p&gt;
+&lt;p&gt;release 写：该线程中此前的所有读写，不能被重排到这个写之后。
+acquire 读：该线程中此后的所有读写，不能被重排到这个读之前。
+当 acquire 读到了 release 写的值，两者之间建立 synchronizes-with 关系，release 之前的所有副作用对 acquire 之后可见。&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;std::atomic&amp;lt;bool&amp;gt; ready{false};
+int payload = 0;               // 普通变量，不需要 atomic
+
+// 生产者
+void producer() {
+    payload = 42;                                        // (1)
+    ready.store(true, std::memory_order_release);        // (2) 屏障
+}
+
+// 消费者
+void consumer() {
+    while (!ready.load(std::memory_order_acquire)) {}     // (3) 屏障
+    assert(payload == 42);                                // (4) 保证成立
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;acq_rel
+用于 read-modify-write 操作，同时具备两侧语义。常见于无锁栈/队列的 CAS 循环：&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;std::atomic&amp;lt;Node*&amp;gt; head{nullptr};
+
+void push(Node* n) {
+    Node* old = head.load(std::memory_order_relaxed);
+    do {
+        n-&amp;gt;next = old;
+    } while (!head.compare_exchange_weak(
+                 old, n,
+                 std::memory_order_release,   // 成功：发布 n-&amp;gt;next 的写
+                 std::memory_order_relaxed)); // 失败：只是重读
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;CAS 有两个 order 参数，失败时通常可以放松，因为失败路径没发布任何东西。&lt;/p&gt;
+&lt;p&gt;seq_cst
+除了 acq_rel 的效果，还额外保证所有 seq_cst 操作存在一个全局单一总序，所有线程观察到的顺序一致。这是默认值，也是最慢的。&lt;/p&gt;
+&lt;p&gt;它和 acq_rel 的差别体现在 IRIW（independent reads of independent writes）和 store buffer 场景：&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;std::atomic&amp;lt;bool&amp;gt; x{false}, y{false};
+std::atomic&amp;lt;int&amp;gt; z{0};
+
+void t1() { x.store(true, std::memory_order_seq_cst); }
+void t2() { y.store(true, std::memory_order_seq_cst); }
+void t3() {
+    while (!x.load(std::memory_order_seq_cst)) {}
+    if (y.load(std::memory_order_seq_cst)) ++z;
+}
+void t4() {
+    while (!y.load(std::memory_order_seq_cst)) {}
+    if (x.load(std::memory_order_seq_cst)) ++z;
+}
+// seq_cst 下 z != 0 必然成立
+// 换成 acquire/release，z == 0 是允许的
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;consume
+设计意图是只对数据依赖链施加顺序（对应 ARM/POWER 上不需要额外指令的场景），比 acquire 更廉价。但依赖链的传播规则难以在编译器中正确实现，所有主流编译器直接把它实现为 acquire。C++17 起标准建议暂不使用，实践中忽略它。&lt;/p&gt;
+&lt;p&gt;独立屏障 atomic_thread_fence
+前面的 order 参数是附着在某个原子操作上的。std::atomic_thread_fence 提供不绑定变量的屏障：&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;std::atomic&amp;lt;bool&amp;gt; ready{false};
+int payload = 0;
+
+// 生产者
+payload = 42;
+std::atomic_thread_fence(std::memory_order_release);
+ready.store(true, std::memory_order_relaxed);   // 注意这里是 relaxed
+
+// 消费者
+while (!ready.load(std::memory_order_relaxed)) {}
+std::atomic_thread_fence(std::memory_order_acquire);
+assert(payload == 42);
+&lt;/code&gt;&lt;/pre&gt;
+                        
+&lt;blockquote&gt;
+&lt;p&gt;Read original: &lt;a href=&#34;http://localhost:1313/posts/semi-constructed_to_memorybarriers/&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;http://localhost:1313/posts/semi-constructed_to_memorybarriers/&lt;/a&gt;&lt;br&gt;
+Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;https://username.substack.com&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;subscribe via Substack&lt;/a&gt; to support my work!&lt;/p&gt;
+&lt;/blockquote&gt;
+                    </description>
+                
+                
+                
+                
+                
+                    
+                        
+                    
+                        
+                    
+                
+            </item>
         
             <item>
                 <title>
