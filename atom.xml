@@ -4,7 +4,7 @@
 <feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
     <title type="text">ArbStray&#39;s Blog</title>
     <subtitle type="html">MemE is a powerful and highly customizable GoHugo theme for personal blogs.</subtitle>
-    <updated>2026-08-03T14:10:03&#43;08:00</updated>
+    <updated>2026-08-06T16:50:11&#43;08:00</updated>
     <id>https://arbstray.github.io/</id>
     <link rel="alternate" type="text/html" href="https://arbstray.github.io/" />
     <link rel="self" type="application/atom&#43;xml" href="https://arbstray.github.io/atom.xml" />
@@ -16,6 +16,324 @@
             </author>
     <rights>[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en)</rights>
     <generator uri="https://gohugo.io/" version="0.164.0">Hugo</generator>
+        <entry>
+            <title type="text">
+C&#43;&#43;20 协程在做什么</title>
+            <link rel="alternate" type="text/html" href="https://arbstray.github.io/posts/coroutine/" />
+            <id>https://arbstray.github.io/posts/coroutine/</id>
+            <updated>2026-08-06T16:50:01&#43;08:00</updated>
+            <published>2026-08-06T14:15:41&#43;08:00</published>
+            <author>
+                    <name>ArbStray</name>
+                    <uri>https://arbstray.github.io/</uri>
+                    <email>myseeker501@gmail.com</email>
+                    </author>
+            <rights>[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en)</rights><summary type="html">
+                &lt;p&gt;假设我们要做这样一件事：&lt;/p&gt;
+&lt;p&gt;从网络读取配置文件路径&lt;br&gt;
+根据路径读取本地文件&lt;br&gt;
+解析文件内容&lt;br&gt;
+把结果发送回客户端&lt;/p&gt;
+&lt;h4 id=&#34;传统的同步方式&#34;&gt;&lt;strong&gt;传统的同步方式&lt;/strong&gt;&lt;/h4&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;void handle_request(Socket&amp;amp; sock) {
+    std::string path = sock.read();           // 阻塞等待网络IO
+    std::string content = read_file(path);    // 阻塞等待磁盘IO
+    Data result = parse(content);             // CPU密集
+    sock.write(result);                       // 阻塞等待网络IO
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;问题：每个阻塞操作都会让整个线程停在那里，无法处理其他请求。&lt;/p&gt;
+&lt;p&gt;传统解决方案：多线程&lt;/p&gt;
+&lt;p&gt;每个请求一个线程&lt;br&gt;
+成本：线程创建/销毁开销、栈内存（MB级）、上下文切换&lt;br&gt;
+结果：C10K问题（以下讲解）&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;单台服务器如何同时处理1万个并发连接？
+
+为什么是个问题
+
+当时主流模型是 一连接一线程：
+
+客户端1 ──► 线程1 (阻塞等待IO)
+客户端2 ──► 线程2 (阻塞等待IO)
+
+客户端10000 ──► 线程10000 ???
+
+10000个线程的代价：
+- 每个线程默认栈 1-8MB → 光栈就要几十GB内存
+- 线程切换的上下文保存/恢复开销随线程数线性增长
+- 内核调度器在大量线程间协调的开销（惊群等问题）
+
+实际上几百个线程就开始显著抖动，根本到不了1万。
+
+解法方向
+
+核心思路：用少量线程驱动大量连接，让IO等待不占线程。
+
+┌───────────────┬──────────────────────────┬────────────────┐
+│     方案      │           机制           │      代表      │
+├───────────────┼──────────────────────────┼────────────────┤
+│ select/poll   │ 轮询fd列表               │ 早期Unix       │
+├───────────────┼──────────────────────────┼────────────────┤
+│ epoll/kqueue  │ 事件通知，只返回就绪的fd │ Linux/BSD      │
+├───────────────┼──────────────────────────┼────────────────┤
+│ 异步IO + 回调 │ 注册回调，IO完成才调用   │ Node.js, libuv │
+├───────────────┼──────────────────────────┼────────────────┤
+│ 协程          │ 用户态调度，切换代价极低 │ Go, C++20      │
+└───────────────┴──────────────────────────┴────────────────┘
+&lt;/code&gt;&lt;/pre&gt;&lt;h4 id=&#34;回调地狱&#34;&gt;&lt;strong&gt;回调地狱&lt;/strong&gt;&lt;/h4&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;void handle_request(Socket&amp;amp; sock) {
+    sock.async_read([&amp;amp;sock](std::string path) {
+        async_read_file(path, [&amp;amp;sock](std::string content) {
+            async_parse(content, [&amp;amp;sock](Data result) {
+                sock.async_write(result, [](bool success) {
+                    // 终于结束了...
+                });
+            });
+        });
+    });
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;问题：&lt;/p&gt;
+                
+&lt;blockquote&gt;
+&lt;p&gt;Read original: &lt;a href=&#34;https://arbstray.github.io/posts/coroutine/&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;https://arbstray.github.io/posts/coroutine/&lt;/a&gt;&lt;br&gt;
+Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;https://username.substack.com&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;subscribe via Substack&lt;/a&gt; to support my work!&lt;/p&gt;
+&lt;/blockquote&gt;
+            </summary>
+            
+                <content type="html">
+                    
+&lt;p&gt;假设我们要做这样一件事：&lt;/p&gt;
+&lt;p&gt;从网络读取配置文件路径&lt;br&gt;
+根据路径读取本地文件&lt;br&gt;
+解析文件内容&lt;br&gt;
+把结果发送回客户端&lt;/p&gt;
+&lt;h4 id=&#34;传统的同步方式&#34;&gt;&lt;a href=&#34;https://arbstray.github.io/posts/coroutine/#传统的同步方式&#34; class=&#34;anchor-link&#34; aria-label=&#34;传统的同步方式&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;传统的同步方式&lt;/strong&gt;&lt;/h4&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;void handle_request(Socket&amp;amp; sock) {
+    std::string path = sock.read();           // 阻塞等待网络IO
+    std::string content = read_file(path);    // 阻塞等待磁盘IO
+    Data result = parse(content);             // CPU密集
+    sock.write(result);                       // 阻塞等待网络IO
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;问题：每个阻塞操作都会让整个线程停在那里，无法处理其他请求。&lt;/p&gt;
+&lt;p&gt;传统解决方案：多线程&lt;/p&gt;
+&lt;p&gt;每个请求一个线程&lt;br&gt;
+成本：线程创建/销毁开销、栈内存（MB级）、上下文切换&lt;br&gt;
+结果：C10K问题（以下讲解）&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;单台服务器如何同时处理1万个并发连接？
+
+为什么是个问题
+
+当时主流模型是 一连接一线程：
+
+客户端1 ──► 线程1 (阻塞等待IO)
+客户端2 ──► 线程2 (阻塞等待IO)
+
+客户端10000 ──► 线程10000 ???
+
+10000个线程的代价：
+- 每个线程默认栈 1-8MB → 光栈就要几十GB内存
+- 线程切换的上下文保存/恢复开销随线程数线性增长
+- 内核调度器在大量线程间协调的开销（惊群等问题）
+
+实际上几百个线程就开始显著抖动，根本到不了1万。
+
+解法方向
+
+核心思路：用少量线程驱动大量连接，让IO等待不占线程。
+
+┌───────────────┬──────────────────────────┬────────────────┐
+│     方案      │           机制           │      代表      │
+├───────────────┼──────────────────────────┼────────────────┤
+│ select/poll   │ 轮询fd列表               │ 早期Unix       │
+├───────────────┼──────────────────────────┼────────────────┤
+│ epoll/kqueue  │ 事件通知，只返回就绪的fd │ Linux/BSD      │
+├───────────────┼──────────────────────────┼────────────────┤
+│ 异步IO + 回调 │ 注册回调，IO完成才调用   │ Node.js, libuv │
+├───────────────┼──────────────────────────┼────────────────┤
+│ 协程          │ 用户态调度，切换代价极低 │ Go, C++20      │
+└───────────────┴──────────────────────────┴────────────────┘
+&lt;/code&gt;&lt;/pre&gt;&lt;h4 id=&#34;回调地狱&#34;&gt;&lt;a href=&#34;https://arbstray.github.io/posts/coroutine/#回调地狱&#34; class=&#34;anchor-link&#34; aria-label=&#34;回调地狱&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;回调地狱&lt;/strong&gt;&lt;/h4&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;void handle_request(Socket&amp;amp; sock) {
+    sock.async_read([&amp;amp;sock](std::string path) {
+        async_read_file(path, [&amp;amp;sock](std::string content) {
+            async_parse(content, [&amp;amp;sock](Data result) {
+                sock.async_write(result, [](bool success) {
+                    // 终于结束了...
+                });
+            });
+        });
+    });
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;问题：&lt;/p&gt;
+&lt;p&gt;可读性崩溃：逻辑被切成碎片，代码向右偏移&lt;br&gt;
+错误处理地狱：每层回调都要处理错误&lt;br&gt;
+生命周期噩梦：捕获的引用很容易悬垂（&amp;amp;sock 可能已经失效）&lt;br&gt;
+无法用循环/条件：for 循环里怎么写异步？&lt;/p&gt;
+&lt;h4 id=&#34;手写状态机&#34;&gt;&lt;a href=&#34;https://arbstray.github.io/posts/coroutine/#手写状态机&#34; class=&#34;anchor-link&#34; aria-label=&#34;手写状态机&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;手写状态机&lt;/strong&gt;&lt;/h4&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;enum class State { ReadPath, ReadFile, Parse, Write, Done };
+
+struct Context {
+    State state = State::ReadPath;
+    Socket* sock;
+    std::string path;
+    std::string content;
+    Data result;
+    
+    void resume() {
+        switch (state) {
+        case State::ReadPath:
+            sock-&amp;gt;async_read([this](std::string p) {
+                path = std::move(p);
+                state = State::ReadFile;
+                resume();
+            });
+            break;
+        case State::ReadFile:
+            async_read_file(path, [this](std::string c) {
+                content = std::move(c);
+                state = State::Parse;
+                resume();
+            });
+            break;
+        // ... 更多状态
+        }
+    }
+};
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;问题：&lt;/p&gt;
+&lt;p&gt;样板代码爆炸：每个异步函数都要写一遍状态机&lt;br&gt;
+局部变量变成成员：path、content 必须存在 Context 里&lt;br&gt;
+跨挂起点的控制流：if/for/try-catch 都要手动拆解&lt;br&gt;
+维护噩梦：加一个步骤要改好几个地方&lt;/p&gt;
+&lt;h4 id=&#34;协程的核心思想暂停与恢复&#34;&gt;&lt;a href=&#34;https://arbstray.github.io/posts/coroutine/#协程的核心思想暂停与恢复&#34; class=&#34;anchor-link&#34; aria-label=&#34;协程的核心思想暂停与恢复&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;&lt;strong&gt;协程的核心思想：暂停与恢复&lt;/strong&gt;&lt;/h4&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;Task&amp;lt;int&amp;gt; compute() {
+    int a = co_await read_async();
+    int b = co_await read_async();
+    co_return a + b;
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;编译器生成的伪代码：&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;struct ComputeFrame {
+    int __state = 0;       // 当前在哪个挂起点
+    int a, b;              // 局部变量提升到帧里
+    Promise __promise;     // 与外界通信
+    SomeAwaitable __tmp1, __tmp2;  // 临时awaiter
+};
+
+Task&amp;lt;int&amp;gt; compute() {
+    auto* frame = new ComputeFrame();  // 堆分配
+    
+    // 状态机
+    switch (frame-&amp;gt;__state) {
+    case 0:  // 第一次进入
+        frame-&amp;gt;__tmp1 = read_async(); //  拿到 awaitable
+        if (!frame-&amp;gt;__tmp1.await_ready()) { //问：数据准备好了吗？
+            frame-&amp;gt;__state = 1;  // 记录恢复点
+            frame-&amp;gt;__tmp1.await_suspend(handle); // 把 handle 交给 IO 系统
+            return frame-&amp;gt;__promise.get_return_object(); //跳出
+        }
+        // 如果已经ready，直接继续
+        [[fallthrough]];
+        
+    case 1:  // 从第一个 co_await 恢复
+        frame-&amp;gt;a = frame-&amp;gt;__tmp1.await_resume();
+        
+        frame-&amp;gt;__tmp2 = read_async();
+        if (!frame-&amp;gt;__tmp2.await_ready()) {
+            frame-&amp;gt;__state = 2;
+            frame-&amp;gt;__tmp2.await_suspend(handle);
+            return;  // 再次挂起
+        }
+        [[fallthrough]];
+        
+    case 2:  // 从第二个 co_await 恢复
+        frame-&amp;gt;b = frame-&amp;gt;__tmp2.await_resume();
+        frame-&amp;gt;__promise.return_value(frame-&amp;gt;a + frame-&amp;gt;b);
+        // ... final_suspend
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;co_await对应了SomeAwaitable&lt;br&gt;
+a b提升到帧里&lt;/p&gt;
+&lt;h3 id=&#34;协程帧布局&#34;&gt;&lt;a href=&#34;https://arbstray.github.io/posts/coroutine/#协程帧布局&#34; class=&#34;anchor-link&#34; aria-label=&#34;协程帧布局&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;协程帧布局&lt;/h3&gt;
+&lt;p&gt;编译器会为每个协程实例在堆上分配一个协程帧，其布局大致如下：&lt;/p&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;+---------------------------+
+| 协程状态 (resume point)    |  ← 保存挂起点索引
++---------------------------+
+| Promise 对象              |  ← promise_type 实例
++---------------------------+
+| 函数参数副本              |  ← 按值/引用捕获的参数
++---------------------------+
+| 局部变量                  |  ← 跨挂起点存活的变量
++---------------------------+
+| 临时对象                  |  ← await_suspend 返回值等
++---------------------------+
+| 对齐填充                  |
++---------------------------+
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;帧的分配：通常通过 operator new 在堆上分配，但可以通过 promise_type 自定义&lt;br&gt;
+生命周期：从协程首次调用创建，到最后一个 coroutine_handle 销毁时释放&lt;br&gt;
+大小优化：编译器会尽量缩小帧大小，只保留跨挂起点的变量&lt;/p&gt;
+&lt;h4 id=&#34;协程函数在编译器下转换&#34;&gt;&lt;a href=&#34;https://arbstray.github.io/posts/coroutine/#协程函数在编译器下转换&#34; class=&#34;anchor-link&#34; aria-label=&#34;协程函数在编译器下转换&#34;&gt;&lt;svg xmlns=&#34;http://www.w3.org/2000/svg&#34; viewBox=&#34;0 0 512 512&#34; class=&#34;icon anchor-icon&#34;&gt;&lt;path d=&#34;M326.612 185.391c59.747 59.809 58.927 155.698.36 214.59-.11.12-.24.25-.36.37l-67.2 67.2c-59.27 59.27-155.699 59.262-214.96 0-59.27-59.26-59.27-155.7 0-214.96l37.106-37.106c9.84-9.84 26.786-3.3 27.294 10.606.648 17.722 3.826 35.527 9.69 52.721 1.986 5.822.567 12.262-3.783 16.612l-13.087 13.087c-28.026 28.026-28.905 73.66-1.155 101.96 28.024 28.579 74.086 28.749 102.325.51l67.2-67.19c28.191-28.191 28.073-73.757 0-101.83-3.701-3.694-7.429-6.564-10.341-8.569a16.037 16.037 0 0 1-6.947-12.606c-.396-10.567 3.348-21.456 11.698-29.806l21.054-21.055c5.521-5.521 14.182-6.199 20.584-1.731a152.482 152.482 0 0 1 20.522 17.197zM467.547 44.449c-59.261-59.262-155.69-59.27-214.96 0l-67.2 67.2c-.12.12-.25.25-.36.37-58.566 58.892-59.387 154.781.36 214.59a152.454 152.454 0 0 0 20.521 17.196c6.402 4.468 15.064 3.789 20.584-1.731l21.054-21.055c8.35-8.35 12.094-19.239 11.698-29.806a16.037 16.037 0 0 0-6.947-12.606c-2.912-2.005-6.64-4.875-10.341-8.569-28.073-28.073-28.191-73.639 0-101.83l67.2-67.19c28.239-28.239 74.3-28.069 102.325.51 27.75 28.3 26.872 73.934-1.155 101.96l-13.087 13.087c-4.35 4.35-5.769 10.79-3.783 16.612 5.864 17.194 9.042 34.999 9.69 52.721.509 13.906 17.454 20.446 27.294 10.606l37.106-37.106c59.271-59.259 59.271-155.699.001-214.959z&#34;/&gt;&lt;/svg&gt;&lt;/a&gt;协程函数在编译器下转换&lt;/h4&gt;
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;// 原始代码
+Task foo(int x) {
+    int a = co_await async_read();
+    int b = co_await async_compute(a);
+    co_return a + b;
+}
+
+// 编译器生成的伪代码
+Task foo(int x) {
+    struct Frame {
+        int state = 0;
+        Promise promise;
+        int x;  // 参数副本
+        int a, b;  // 局部变量
+        SomeAwaitable awaiter1, awaiter2;
+    };
+    
+    Frame* f = new Frame{.x = x};
+    
+    // 状态机
+    switch (f-&amp;gt;state) {
+    case 0:
+        f-&amp;gt;awaiter1 = async_read();
+        if (!f-&amp;gt;awaiter1.await_ready()) {
+            f-&amp;gt;state = 1;
+            f-&amp;gt;awaiter1.await_suspend(handle_from_frame(f));
+            return f-&amp;gt;promise.get_return_object();
+        }
+        [[fallthrough]];
+    case 1:
+        f-&amp;gt;a = f-&amp;gt;awaiter1.await_resume();
+        f-&amp;gt;awaiter2 = async_compute(f-&amp;gt;a);
+        if (!f-&amp;gt;awaiter2.await_ready()) {
+            f-&amp;gt;state = 2;
+            f-&amp;gt;awaiter2.await_suspend(handle_from_frame(f));
+            return;
+        }
+        [[fallthrough]];
+    case 2:
+        f-&amp;gt;b = f-&amp;gt;awaiter2.await_resume();
+        f-&amp;gt;promise.return_value(f-&amp;gt;a + f-&amp;gt;b);
+        goto final_suspend;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+                    
+&lt;blockquote&gt;
+&lt;p&gt;Read original: &lt;a href=&#34;https://arbstray.github.io/posts/coroutine/&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;https://arbstray.github.io/posts/coroutine/&lt;/a&gt;&lt;br&gt;
+Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;https://username.substack.com&#34; target=&#34;_blank&#34; rel=&#34;noopener&#34;&gt;subscribe via Substack&lt;/a&gt; to support my work!&lt;/p&gt;
+&lt;/blockquote&gt;
+                </content>
+            
+            
+            
+            
+            
+                
+                    
+                
+                    
+                
+            
+        </entry>
+    
         <entry>
             <title type="text">
 从半构造BUG到内存屏障</title>
@@ -891,10 +1209,10 @@ Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;
     
         <entry>
             <title type="text">
-game104_net_02</title>
+游戏网络架构2</title>
             <link rel="alternate" type="text/html" href="https://arbstray.github.io/posts/game104_net_02/" />
             <id>https://arbstray.github.io/posts/game104_net_02/</id>
-            <updated>2026-07-31T15:02:27&#43;08:00</updated>
+            <updated>2026-08-06T11:50:48&#43;08:00</updated>
             <published>2026-07-31T14:43:01&#43;08:00</published>
             <author>
                     <name>ArbStray</name>
@@ -1125,10 +1443,10 @@ Notice: This blog now offers email subscriptions—feel free to &lt;a href=&#34;
     
         <entry>
             <title type="text">
-game104_net_01</title>
+游戏网络架构1</title>
             <link rel="alternate" type="text/html" href="https://arbstray.github.io/posts/game104_net_01/" />
             <id>https://arbstray.github.io/posts/game104_net_01/</id>
-            <updated>2026-07-31T14:48:51&#43;08:00</updated>
+            <updated>2026-08-06T11:50:37&#43;08:00</updated>
             <published>2026-07-31T14:42:56&#43;08:00</published>
             <author>
                     <name>ArbStray</name>
